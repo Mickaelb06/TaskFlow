@@ -1,17 +1,17 @@
 # Plan de tests
 
 ## Stratégie
-- **Tests d'API automatisés** (DRF `APITestCase`, base isolée) : 321 tests (+ 8 tests Rust), exécutés à chaque push par la CI.
-- **Tests du front** sur un faux navigateur (198 vérifications) et **tests de bout en bout dans un vrai navigateur** (Firefox + Selenium, 30 scénarios, job CI dédié).
+- **Tests d'API automatisés** (DRF `APITestCase`, base isolée) : 338 tests (+ 8 tests Rust), exécutés à chaque push par la CI.
+- **Tests du front** sur un faux navigateur (204 vérifications) et **tests de bout en bout dans un vrai navigateur** (Firefox + Selenium, 33 scénarios, job CI dédié).
 - **Tests manuels** du front selon les scénarios ci-dessous (ce que l'automatisation ne juge pas : la qualité visuelle).
 - Priorité aux **règles métier et aux droits**, là où les régressions sont les plus graves.
 
 ## Exécution
 ```bash
-cd backend && python manage.py test        # 321 tests (~15 s)
+cd backend && python manage.py test        # 338 tests (~15 s)
 cd backend/planning_rs && cargo test --lib  # 8 tests Rust
-./test-front.sh                              # 198 vérifications (faux navigateur, macOS)
-./test-e2e.sh                                # 30 scénarios Firefox + Selenium (pip install selenium)
+./test-front.sh                              # 204 vérifications (faux navigateur, macOS)
+./test-e2e.sh                                # 33 scénarios Firefox + Selenium (pip install selenium)
 ```
 
 ## Cas de test automatisés
@@ -20,6 +20,10 @@ cd backend/planning_rs && cargo test --lib  # 8 tests Rust
 | Comptes | inscription → connexion → `/me/` | 201, 200, nom correct |
 | Comptes | mot de passe faible / email en doublon (casse différente) | 400 |
 | Projets | création | créateur = propriétaire |
+| Invitations | lien créé par le propriétaire : jeton non stocké, absent de la liste ; réservé au propriétaire (403 membre, 404 étranger) | 201 ; seule l'empreinte en base |
+| Invitations | accepter un lien : rôle du lien, compteur d'usages ; membre existant ni rétrogradé ni compté ; sans compte | 200 ; 401 sans compte |
+| Membres | recherche par `@nom` : préfixe, casse, « @ » ignoré, 1 caractère = rien, comptes désactivés et membres exclus, propriétaire seulement, 8 résultats max., limite de débit | 200 ; 403/404 ; 429 |
+| Invitations | lien épuisé, expiré, révoqué ou inconnu ; révocation du lien d'un autre projet ; plafond de liens actifs ; aperçu limité en débit | 404 identique ; 404 ; 400 ; 429 |
 | Projets | liste d'un utilisateur sans projet | vide (isolation) |
 | Projets | modification / suppression par un simple membre | 403 |
 | Membres | ajout par nom, par email (casse ignorée), avec rôle lecteur | 201 |
@@ -130,15 +134,15 @@ cd backend/planning_rs && cargo test --lib  # 8 tests Rust
 18. Barre latérale : réduire/agrandir (« / »), pastilles sur Messages et sur les projets, administration et thème en pied ; `C` calendrier, `H` tableau de bord, `I` messages.
 
 ## Tests du front (`./test-front.sh`)
-198 vérifications sur un faux navigateur (JavaScriptCore) : accueil, synthèse, Gantt, équipe, calendrier et fuseaux, administration. Elles contrôlent le HTML produit (structure, calculs de géométrie, échappement des contenus utilisateur, droits affichés). Elles **ne remplacent pas** un test dans un vrai navigateur.
+204 vérifications sur un faux navigateur (JavaScriptCore) : accueil, synthèse, Gantt, équipe, calendrier et fuseaux, administration. Elles contrôlent le HTML produit (structure, calculs de géométrie, échappement des contenus utilisateur, droits affichés). Elles **ne remplacent pas** un test dans un vrai navigateur.
 
 ## Tests de bout en bout (`./test-e2e.sh`)
-30 scénarios dans un **vrai navigateur** (Firefox headless piloté par Selenium) contre une API et un front temporaires : barre latérale (repli), vues de projet, calendrier (grille, création par clic et par balayage, **déplacement et redimensionnement à la souris** avec contrôle de la base, simple clic sans déplacement, série et suppression d'une occurrence, réponse à une invitation, changement de fuseau, navigation), messagerie (autocomplétion `@`, envoi, **notification entre deux navigateurs connectés à deux comptes**, `#tâche`, réaction / réponse / modification / suppression, pièce jointe chargée avec le jeton, recherche, bloc-notes), charge et simulation, chrono (compteur qui avance, survie à un rechargement), création de projet depuis un modèle, tâche récurrente, jours ouvrés, thème sombre, **création puis suppression d'un compte**, administration, erreur de connexion. Chaque test échoue si le bandeau d'erreur JavaScript apparaît. Ces tests ont déjà révélé de vrais défauts (onglet « Inscription » resté actif après déconnexion, Entrée qui choisissait la suggestion au lieu d'envoyer un nom déjà tapé en entier, plage créée par balayage trop courte).
+33 scénarios dans un **vrai navigateur** (Firefox headless piloté par Selenium) contre une API et un front temporaires : barre latérale (repli), vues de projet, calendrier (grille, création par clic et par balayage, **déplacement et redimensionnement à la souris** avec contrôle de la base, simple clic sans déplacement, série et suppression d'une occurrence, réponse à une invitation, changement de fuseau, navigation), messagerie (autocomplétion `@`, envoi, **notification entre deux navigateurs connectés à deux comptes**, `#tâche`, réaction / réponse / modification / suppression, pièce jointe chargée avec le jeton, recherche, bloc-notes), charge et simulation, chrono (compteur qui avance, survie à un rechargement), création de projet depuis un modèle, tâche récurrente, jours ouvrés, **ajout d'un membre par `@nom`, **conversation qui reste en bas à droite sur les autres pages** (envoi, réduire, rechargement, retour dans Messages), lien d'invitation (un second navigateur s'inscrit via le lien et rejoint le projet avec le bon rôle)**, thème sombre, **création puis suppression d'un compte**, administration, erreur de connexion. Chaque test échoue si le bandeau d'erreur JavaScript apparaît. Ces tests ont déjà révélé de vrais défauts (onglet « Inscription » resté actif après déconnexion, Entrée qui choisissait la suggestion au lieu d'envoyer un nom déjà tapé en entier, plage créée par balayage trop courte).
 
 ## Journal des résultats
 | Date | Version | Tests auto | Remarques |
 |---|---|---|---|
-| 2026-10-12 | 0.5.0 | 321/321 OK avec chaque moteur ; 8/8 tests Rust ; 198/198 front ; 30/30 E2E Firefox (Django 5.2, Python 3.12, SQLite) | à rejouer sur PostgreSQL ; Docker et CI non exécutés sur cette machine |
+| 2026-10-12 | 0.5.0 | 338/338 OK avec chaque moteur ; 8/8 tests Rust ; 204/204 front ; 33/33 E2E Firefox (Django 5.2, Python 3.12, SQLite) | à rejouer sur PostgreSQL ; Docker et CI non exécutés sur cette machine |
 
 ## À ajouter
 Couverture de code (`coverage`), tests de charge, tests E2E sur Chrome et Safari (seul Firefox est piloté), tests d'accessibilité automatisés.

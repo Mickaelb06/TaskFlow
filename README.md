@@ -30,6 +30,8 @@ Application web de gestion de projet, seul ou en équipe : tâches et Gantt, cal
 
 **Tableaux de bord**
 - **Tableau de bord personnel** (page d'accueil) : mon focus du jour (je coche une tâche directement), mes 7 prochains jours, ma productivité sur 14 jours, la santé de chacun de mes projets, et des alertes sur les collègues en retard — tous projets confondus
+- **Mini-fenêtre de conversation** : quand on quitte Messages, le fil ouvert reste en bas à droite (réduire, agrandir, envoyer, ouvrir dans Messages) et survit à un rechargement ; elle se met à jour toutes les 15 s
+- **Équipe** : ajouter un membre par `@nom` (suggestions) ou e-mail, ou créer un **lien d'invitation** (rôle, durée 1/7/30 jours, nombre de personnes) à envoyer ; la personne s'inscrit ou se connecte et rejoint le projet ; liens révocables
 - **Synthèse de projet** (onglet par défaut d'un projet) : avancement dans le temps (tâches créées / terminées sur 30 jours), répartition par statut et priorité, vélocité hebdomadaire, charge et retard de chaque membre, échéances de la semaine, risques, dernières tâches terminées
 
 **Gestion de projet**
@@ -76,6 +78,9 @@ Application web de gestion de projet, seul ou en équipe : tâches et Gantt, cal
 `agenda/` : calendrier (événements, fuseaux horaires) ; `frontend/js/tz.js` et `calendar.js` : conversion d'heures et grille horaire.
 Les serializers valident les entrées/sorties ; les permissions par rôle sont vérifiées côté serveur.
 
+## Page vitrine
+`frontend/vitrine/index.html` : page commerciale statique servie avec le front (`/vitrine/`), sans dépendance. Les captures de `img/` viennent de l'application avec les données de démo.
+
 ## Démarrage rapide (Docker)
 ```bash
 cp .env.example .env
@@ -96,10 +101,10 @@ python manage.py runserver                 # API : http://localhost:8000
 cd frontend && python3 serve.py 5173 # front : http://localhost:5173 (sans cache ; /admin ouvre l'administration)
 ```
 Module Rust (optionnel, recommandé) : `cd backend && pip install maturin && export PYO3_PYTHON="$PWD/.venv/bin/python" && maturin develop --release --uv -m planning_rs/Cargo.toml` (nécessite [Rust](https://rustup.rs)). Sans lui l'application fonctionne avec la version Python.
-Tests : `cd backend && python manage.py test` (321 tests, aucun appel réseau ; `TASKFLOW_PLANNING_BACKEND=python` pour tester le repli) ; `cd backend/planning_rs && cargo test --lib` (8 tests Rust) ; `python bench_planning.py` (mesures Rust/Python)
+Tests : `cd backend && python manage.py test` (338 tests, aucun appel réseau ; `TASKFLOW_PLANNING_BACKEND=python` pour tester le repli) ; `cd backend/planning_rs && cargo test --lib` (8 tests Rust) ; `python bench_planning.py` (mesures Rust/Python)
 Données de démo : `python manage.py seed_demo` (comptes `demo` (propriétaire des projets **et** administrateur : voit toutes les vues), `lea`, `sam` — mot de passe `demo-taskflow-2026` ; compte `admin` / `admin-taskflow-2026` = administrateur seul, sans projet : n'affiche que l'administration — **à changer en production**)
-Tests de bout en bout dans un **vrai navigateur** : `./test-e2e.sh` (30 scénarios Firefox + Selenium : calendrier, glisser-déposer, messagerie à deux comptes, chrono, modèles… ; `pip install selenium`). Résumé du matin : `python manage.py send_digest [--dry-run]`.
-Front : `./test-front.sh` (198 vérifications sur un faux navigateur, macOS). Premier administrateur en production : `python manage.py createsuperuser`.
+Tests de bout en bout dans un **vrai navigateur** : `./test-e2e.sh` (33 scénarios Firefox + Selenium : calendrier, glisser-déposer, messagerie à deux comptes, chrono, modèles… ; `pip install selenium`). Résumé du matin : `python manage.py send_digest [--dry-run]`.
+Front : `./test-front.sh` (204 vérifications sur un faux navigateur, macOS). Premier administrateur en production : `python manage.py createsuperuser`.
 Lancement local : `./start.sh` (démarre API + front, ouvre le navigateur) ; `./start.sh stop`.
 
 ## Documentation

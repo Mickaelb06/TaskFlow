@@ -43,3 +43,21 @@ class ProjectTemplate(models.Model):
 
     class Meta:
         ordering = ["name", "id"]
+
+
+class ProjectInvite(models.Model):
+    """Lien d'invitation à un projet. Le jeton n'est jamais stocké : seule son empreinte l'est (comme un mot de passe),
+    il n'est montré qu'à la création. Un lien expire, a un nombre d'usages maximal et peut être révoqué."""
+
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="invites")
+    token_hash = models.CharField(max_length=64, unique=True)
+    role = models.CharField(max_length=10, choices=[("member", "Membre"), ("viewer", "Lecteur")], default="member")
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    max_uses = models.PositiveSmallIntegerField(default=10)
+    uses = models.PositiveSmallIntegerField(default=0)
+    revoked = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]

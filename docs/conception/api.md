@@ -15,6 +15,12 @@ Base : `/api`. Authentification : `Authorization: Bearer <access token>`. Erreur
 | POST | `/projects/{id}/members/` | propriétaire | Ajouter `{identifier, role}` (nom ou email) |
 | PATCH | `/projects/{id}/members/{user_id}/` | propriétaire | Changer le rôle |
 | DELETE | `/projects/{id}/members/{user_id}/` | propriétaire, ou soi-même | Retirer / quitter |
+| GET | `/projects/{id}/invites/` | propriétaire | Liens d'invitation actifs (`id, role, expires_at, max_uses, uses`) ; jamais le jeton |
+| POST | `/projects/{id}/invites/` | propriétaire | Créer un lien `{role: member\|viewer, days: 1\|7\|30, max_uses: 1..100}` → renvoie **une seule fois** `token` (20 liens actifs au plus) |
+| DELETE | `/projects/{id}/invites/{iid}/` | propriétaire | Révoquer un lien |
+| GET | `/projects/{id}/member-candidates/?q=` | propriétaire | Comptes dont le nom **commence par** `q` (« @ » initial ignoré, 1 caractère min., 8 résultats, hors membres actuels) ; limité à 60/min |
+| GET | `/invites/{jeton}/` | public (limité à 30/min) | Aperçu `{project_name, role, inviter}` ; **404 identique** si le jeton est inconnu, expiré, révoqué ou épuisé |
+| POST | `/invites/{jeton}/accept/` | connecté | Rejoindre le projet → `{project_id, project_name, already_member}` ; un membre existant n'est ni rétrogradé ni compté |
 | GET | `/projects/{id}/tasks/` | membre | Liste. Filtres : `status`, `assignee`, `due_after`, `due_before` |
 | POST | `/projects/{id}/tasks/` | propriétaire, membre | Créer |
 | GET, PATCH, DELETE | `/projects/{id}/tasks/{tid}/` | lecture : tous ; écriture : propriétaire, membre | Détail / modifier / supprimer |

@@ -20,7 +20,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from selenium import webdriver
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import StaleElementReferenceException, TimeoutException
 from selenium.webdriver import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -146,7 +146,14 @@ class Browser:
         return not self.qs("#fatal")
 
     def text(self, css):
-        return self.q(css).text
+        """Texte d'un élément ; relit si l'interface a été repeinte entre la recherche et la lecture."""
+        for attempt in range(5):
+            try:
+                return self.q(css).text
+            except StaleElementReferenceException:
+                if attempt == 4:
+                    raise
+                time.sleep(0.2)
 
     def quit(self):
         self.d.quit()
@@ -242,7 +249,7 @@ class E2E(unittest.TestCase):
         b.wait("#modal .modal-card")
         b.q('#modal input[name="title"]').send_keys("Rendez-vous E2E")
         b.q('#modal button[value="ok"]').click()
-        b.w.until(lambda d: any("Rendez-vous E2E" in e.text for e in b.qs(".cevent")))
+        b.w.until(lambda d: self.has_text(".cevent", "Rendez-vous E2E"))
         self.assertEqual(self.event_by_title("Rendez-vous E2E")["timezone"], "Europe/Paris")
 
     def test_12_create_event_by_dragging_a_range(self):
@@ -639,6 +646,89 @@ class E2E(unittest.TestCase):
                 api("POST", "/auth/token/", body={"username": "jetable", "password": "Mot-de-passe-9x"})
         finally:
             b.quit()
+
+    def test_34_invitation_link_brings_a_new_account_into_the_project(self):
+        from selenium.webdriver.support.ui import Select
+        b = self.open_project()
+        pid = self.project_id()
+        b.click('#toolbar [data-action="members"]')
+        b.wait('#modal [data-action="create-invite"]')
+        Select(b.q('#modal select[name="inviteRole"]')).select_by_value("viewer")
+        b.click('#modal [data-action="create-invite"]')
+        b.wait("#modal .invite-new input")
+        link = b.q("#modal .invite-new input").get_attribute("value")
+        self.assertIn("?invite=", link)
+        self.assertIn("0/10", b.text("#modal .invite-list"))
+        b.click('#modal button[value="cancel"]')
+        guest = Browser()
+        try:
+            guest.d.get(link)
+            guest.w.until(lambda d: guest.qs("#invite-banner:not([hidden])"))
+            self.assertIn("Site web", guest.text("#invite-banner"))
+            self.assertIn("lecteur", guest.text("#invite-banner"))
+            self.assertNotIn("invite=", guest.d.current_url)  # le jeton ne reste pas dans l'adresse
+            form = guest.q("#register-form")
+            self.assertTrue(form.is_displayed())  # le lien ouvre directement l'inscription
+            form.find_element(By.NAME, "username").send_keys("invite-e2e")
+            form.find_element(By.NAME, "email").send_keys("invite@example.com")
+            form.find_element(By.NAME, "password").send_keys("Mot-de-passe-9x")
+            form.find_element(By.CSS_SELECTOR, "button").click()
+            guest.wait("#sidebar .navitem")
+            guest.w.until(lambda d: "rejoint" in guest.text("#toast"))
+            self.assertIn("Site web", guest.text("#toolbar"))
+            members = api("GET", f"/projects/{pid}/members/", self.br.token())
+            joined = next(m for m in members if m["username"] == "invite-e2e")
+            self.assertEqual(joined["role"], "viewer")
+        finally:
+            guest.quit()
+            for inv in api("GET", f"/projects/{pid}/invites/", self.br.token()):
+                api("DELETE", f"/projects/{pid}/invites/{inv['id']}/", self.br.token())
+            members = api("GET", f"/projects/{pid}/members/", self.br.token())
+            for m in members:
+                if m["username"] == "invite-e2e":
+                    api("DELETE", f"/projects/{pid}/members/{m['user_id']}/", self.br.token())
+
+    def test_35_add_a_member_by_typing_at_and_a_name(self):
+        b = self.open_project("Perso")
+        pid = self.project_id("Perso")
+        b.click('#toolbar [data-action="members"]')
+        field = b.wait('#modal input[name="identifier"]')
+        try:
+            field.send_keys("@le")
+            b.wait("#cand-pop .cand")
+            self.assertIn("lea", b.text("#cand-pop"))
+            self.assertNotIn("demo", b.text("#cand-pop"))  # moi : déjà membre
+            field.send_keys(Keys.ENTER)  # choisit la suggestion, n'envoie pas encore
+            self.assertEqual(field.get_attribute("value"), "lea")
+            b.click('#modal button[value="ok"]')
+            b.w.until(lambda d: any(m["username"] == "lea" for m in api("GET", f"/projects/{pid}/members/", self.br.token())))
+        finally:
+            for m in api("GET", f"/projects/{pid}/members/", self.br.token()):
+                if m["username"] == "lea":
+                    api("DELETE", f"/projects/{pid}/members/{m['user_id']}/", self.br.token())
+
+    def test_36_conversation_stays_in_the_corner_on_other_pages(self):
+        b = self.open_team_chat()
+        cid = int(b.q('.crow.active[data-action="open-conv"]').get_attribute("data-id"))
+        b.go("go-calendar", ".ccol")  # on quitte Messages : le fil passe dans la mini-fenêtre
+        b.wait("#dock .dock-msgs")
+        self.assertIn("Site web", b.text("#dock .dock-head"))
+        box = b.q("#dock-input")
+        box.send_keys("Message depuis la mini-fenêtre E2E")
+        box.send_keys(Keys.ENTER)
+        b.w.until(lambda d: "mini-fenêtre E2E" in b.text("#dock-msgs"))
+        sent = api("GET", f"/chat/conversations/{cid}/messages/", self.br.token())["messages"]
+        self.assertTrue(any("mini-fenêtre E2E" in m["content"] for m in sent))
+        b.click("#dock .dock-head")  # réduire : seul l'en-tête reste
+        b.w.until(lambda d: not b.qs("#dock-msgs"))
+        b.click("#dock .dock-head")  # agrandir
+        b.wait("#dock-msgs")
+        b.d.refresh()  # elle survit à un rechargement de la page
+        b.wait("#dock .dock-msgs")
+        b.click('#dock [data-action="dock-expand"]')
+        b.wait("#chat-input")
+        self.assertFalse(b.qs("#dock .dock-card"))  # la conversation a repris sa place dans Messages
+        self.assertIn("mini-fenêtre E2E", b.text("#chat-msgs"))
 
     def test_32_admin_overview(self):
         b = self.br

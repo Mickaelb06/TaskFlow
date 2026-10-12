@@ -264,6 +264,26 @@ ok("journal : acteur échappé", !v.includes("al<b>ice") && v.includes("al&lt;b&
 await act("admin-tab", { tab: "settings" });
 v = view();
 ok("réglages : un seul interrupteur (inscriptions), plus d'IA", (v.match(/data-setting=/g) || []).length === 1 && !/IA|Claude/.test(v));
+await act("go-messages");
+await act("open-conv", { id: "10" });
+await act("go-home");
+await tick(200);
+ok("mini-fenêtre : quitter Messages garde le fil en bas à droite (titre, messages, saisie)", !e["#dock"].hidden && e["#dock"].innerHTML.includes("dock-head") && e["#dock"].innerHTML.includes('id="dock-input"') && e["#dock-msgs"].innerHTML.includes("cmsg") && !e["#dock-msgs"].innerHTML.includes("cmsg-tools"));
+await act("dock-toggle");
+ok("mini-fenêtre : réduire ne garde que l'en-tête", e["#dock"].innerHTML.includes("dock-card min") && !e["#dock"].innerHTML.includes("dock-msgs"));
+await act("dock-expand");
+await tick(200);
+ok("mini-fenêtre : « ouvrir dans Messages » la retire du coin", e["#dock"].hidden && view().includes("chat-form"));
+await act("go-home");
+await tick(200);
+await act("dock-close");
+ok("mini-fenêtre : fermer la retire", e["#dock"].hidden);
+await act("select-project", { id: "7" });
+await act("members");
+m = e["#modal"].innerHTML;
+ok("membres : lien d'invitation (rôle, durée, nombre), lien existant, ajout par nom", m.includes('data-action="create-invite"') && m.includes('name="inviteRole"') && m.includes('name="inviteDays"') && m.includes('name="inviteUses"') && m.includes("Lecteur · jusqu") && m.includes("2/10 utilisés") && m.includes("déjà un compte"));
+await act("revoke-invite", { id: "5" });
+ok("révoquer un lien appelle l'API", __calls.some((c) => c.method === "DELETE" && c.path === "/projects/7/invites/5/"));
 await act("go-home");
 ok("retour à l'accueil depuis l'administration", view().includes("dash-hello"));
 

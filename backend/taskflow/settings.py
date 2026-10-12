@@ -67,6 +67,8 @@ REST_FRAMEWORK = {
         "register": os.environ.get("REGISTER_RATE", "10/hour"),  # créations de compte par adresse IP
         "chat": os.environ.get("CHAT_RATE", "60/min"),          # messages envoyés par utilisateur
         "account": os.environ.get("ACCOUNT_RATE", "10/hour"),   # export / suppression de son compte
+        "search": os.environ.get("SEARCH_RATE", "60/min"),      # recherche d'un compte à ajouter à un projet
+        "invite": os.environ.get("INVITE_RATE", "30/min"),      # aperçu et acceptation d'un lien d'invitation (par IP ou compte)
     },
 }
 

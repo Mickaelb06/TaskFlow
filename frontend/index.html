@@ -31,6 +31,7 @@
     <div class="auth-card">
       <div class="brand big"><span class="logo">✓</span> TaskFlow</div>
       <p class="muted">Projets, tâches, calendrier et messagerie : seul ou en équipe.</p>
+      <div id="invite-banner" class="invite-banner" hidden></div>
       <div class="seg" id="auth-tabs">
         <button class="on" data-auth-tab="login">Connexion</button>
         <button data-auth-tab="register">Inscription</button>
@@ -58,6 +59,7 @@
     <aside id="panel"></aside>
   </div>
 
+  <div id="dock" class="dock" hidden></div>
   <dialog id="modal"></dialog>
   <div id="toast" role="status" aria-live="polite"></div>
   <script type="module" src="js/app.js"></script>

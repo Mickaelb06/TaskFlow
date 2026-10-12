@@ -35,7 +35,7 @@ Règles : on ne repousse jamais une tâche plus tôt ; les tâches terminées ne
 ## Garantir que les deux versions restent identiques
 - `cargo test --lib` : 8 tests Rust (cascade, chemin critique, prévision, simulation de retard, cycles).
 - `tasks/test_engine.py` : compare Rust et Python sur environ **1 600 graphes aléatoires** (DAG, graphes avec cycles, tâches terminées ou non planifiées, graphe de 3 000 tâches). Une divergence fait échouer le test.
-- Toute la suite Django (321 tests) est exécutée **avec chaque moteur** (matrice `engine: [rust, python]` en CI).
+- Toute la suite Django (338 tests) est exécutée **avec chaque moteur** (matrice `engine: [rust, python]` en CI).
 
 Règle d'or : modifier un algorithme = modifier **les deux** fichiers + ajouter le cas au test de comparaison.
 

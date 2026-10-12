@@ -37,6 +37,7 @@ const state = {
   showCritical: auth.pref.get("critical") !== "0",
   filter: { group: "due", assignee: "", priority: "", showDone: false },
   summary: { unread_messages: 0, unread_notifications: 0 },
+  dock: { conv: null, min: false, messages: [], draft: "", sending: false },
   chat: { convs: [], current: null, messages: [], hasMore: false, drafts: {}, pick: { items: [], active: 0, start: 0 }, editing: null, reactFor: null, replyTo: null, files: [], search: null, tasks: {} },
   notifs: [],
   wl: { data: null, sim: null, weeks: 4, delay: 3 },
@@ -127,7 +128,16 @@ async function patchTask(id, patch, fromPanel = false) {
 
 /* ---------- rendu ---------- */
 let lastPageKey = "";
+let prevPage = null;
+/** Affiche la page puis gère la mini-fenêtre : quitter Messages avec un fil ouvert le garde en bas à droite. */
 function render() {
+  const leftMessages = prevPage === "messages" && state.page !== "messages";
+  renderPage();
+  prevPage = state.page;
+  if (leftMessages && state.chat.current && !state.dock.conv) dockOpen(state.chat.current, { draft: state.chat.drafts[state.chat.current] || "" }).catch(() => {});
+  else renderDock();
+}
+function renderPage() {
   // petite entrée animée à chaque changement de page (pas à chaque rafraîchissement de la même page)
   const key = `${state.page}:${state.page === "project" ? `${state.project?.id}:${state.view}` : ""}`;
   if (key !== lastPageKey) {
@@ -494,10 +504,10 @@ function paintComments() {
 }
 
 /* ---------- modales ---------- */
-function openModal(title, body, onSubmit) {
+function openModal(title, body, onSubmit, cls = "") {
   const m = $("#modal");
   if (m.open) m.close();
-  m.innerHTML = `<form class="modal-card" method="dialog"><h2>${title}</h2>${body}</form>`;
+  m.innerHTML = `<form class="modal-card ${cls}" method="dialog"><h2>${title}</h2>${body}</form>`;
   const form = m.querySelector("form");
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -613,8 +623,12 @@ function projectModal(project) {
     })));
 }
 
-function membersModal() {
+const INVITE_DAYS = [[1, "1 jour"], [7, "7 jours"], [30, "30 jours"]];
+const inviteUrl = (token) => `${location.origin}/?invite=${encodeURIComponent(token)}`;
+
+async function membersModal() {
   const owner = isOwner();
+  const invites = owner ? await api.invites(state.project.id).catch(() => []) : [];
   const rows = state.members.map((m) => `<div class="member">${avatar(m.username)}
     <span class="grow">${esc(m.username)}${m.user_id === state.user.id ? ' <span class="muted small">(vous)</span>' : ""}</span>
     ${owner && m.role !== "owner"
@@ -622,20 +636,75 @@ function membersModal() {
          <button type="button" class="btn ghost sm" data-action="transfer-owner" data-uid="${m.user_id}" title="Céder la propriété du projet à ${esc(m.username)}">Céder</button>
          <button type="button" class="icon-btn" data-action="remove-member" data-uid="${m.user_id}" title="Retirer" aria-label="Retirer">${icon("x", 15)}</button>`
       : `<span class="muted small">${ROLE[m.role]}</span>`}</div>`).join("");
-  const add = owner ? `<h3>Inviter</h3><div class="row">
-      <input name="identifier" placeholder="Nom d'utilisateur ou email" required>
+  const fresh = state.newInvite;
+  const link = owner ? `<h3>Lien d'invitation</h3>
+    <p class="muted small">Toute personne qui ouvre ce lien peut rejoindre le projet, après avoir créé un compte ou s'être connectée.</p>
+    ${fresh ? `<div class="invite-new"><input readonly value="${esc(inviteUrl(fresh.token))}" aria-label="Lien d'invitation">
+        <button type="button" class="btn primary" data-action="copy-invite">Copier</button></div>
+      <p class="muted small">Copiez-le maintenant : il ne sera plus affiché ensuite.</p>` : ""}
+    <div class="invite-make">
+      <select name="inviteRole" aria-label="Rôle donné par le lien"><option value="member">Membre</option><option value="viewer">Lecteur</option></select>
+      <select name="inviteDays" aria-label="Durée de validité">${INVITE_DAYS.map(([d, l]) => `<option value="${d}" ${d === 7 ? "selected" : ""}>Valable ${l}</option>`).join("")}</select>
+      <select name="inviteUses" aria-label="Nombre d'utilisations">${[1, 5, 10, 50].map((n) => `<option value="${n}" ${n === 10 ? "selected" : ""}>${n} ${n > 1 ? "personnes" : "personne"} max.</option>`).join("")}</select>
+      <button type="button" class="btn" data-action="create-invite">Créer un lien</button></div>
+    ${invites.length ? `<div class="invite-list">${invites.map((i) => `<div class="invite-row"><span class="grow">${ROLE[i.role]} · jusqu'au ${D.fmt(new Date(i.expires_at), { day: "numeric", month: "short" })} · ${i.uses}/${i.max_uses} utilisé${i.uses > 1 ? "s" : ""}</span>
+        <button type="button" class="btn ghost sm danger" data-action="revoke-invite" data-id="${i.id}">Révoquer</button></div>`).join("")}</div>` : ""}` : "";
+  const add = owner ? `<h3>Ajouter quelqu'un qui a déjà un compte</h3><div class="row">
+      <div class="cand-wrap"><input name="identifier" placeholder="@ puis un nom, ou une adresse e-mail" autocomplete="off" aria-label="Nom d'utilisateur ou e-mail">
+        <div id="cand-pop" class="cand-pop" role="listbox" hidden></div></div>
       <select name="role"><option value="member">Membre</option><option value="viewer">Lecteur</option></select>
       <button class="btn primary" value="ok">Ajouter</button></div>
       <p class="muted small">Un projet à un seul membre est un projet solo.</p>` : "";
-  openModal("Membres", `<div class="stack-sm">${rows}</div>${add}
+  openModal("Membres", `<div class="stack-sm">${rows}</div>${link}${add}
     <div class="row end"><button class="btn ghost" value="cancel" formnovalidate>Fermer</button></div>`, async (f) => {
-    if (!f.identifier) return;
-    await api.addMember(state.project.id, { identifier: f.identifier, role: f.role });
+    const who = (f.identifier || "").trim().replace(/^@/, "");
+    if (!who) return false;
+    await api.addMember(state.project.id, { identifier: who, role: f.role });
     state.members = await api.members(state.project.id);
     renderToolbar();
     membersModal();
     return false;
   });
+  if (owner) wireCandidates();
+}
+
+/** Recherche d'un compte à ajouter : tapez « @le » ou « le » et choisissez dans la liste (même geste que dans la messagerie). */
+function wireCandidates() {
+  const input = $("#modal input[name=identifier]");
+  const pop = $("#cand-pop");
+  if (!input || !pop) return;
+  let items = [], active = 0, timer = 0, seq = 0;
+  const hide = () => { items = []; pop.hidden = true; pop.innerHTML = ""; };
+  const paint = () => {
+    pop.hidden = !items.length;
+    pop.innerHTML = items.map((u, i) => `<button type="button" role="option" class="cand ${i === active ? "on" : ""}" data-action="pick-candidate" data-name="${esc(u.username)}">${avatar(u.username, "xs")}<span>${esc(u.username)}</span></button>`).join("");
+  };
+  const search = async () => {
+    const q = input.value.trim().replace(/^@/, "");
+    const mine = ++seq;
+    if (!q || q.includes("@")) return hide();  // « @ » + une lettre suffit ; une adresse e-mail se saisit en entier
+    const found = await api.memberCandidates(state.project.id, q).catch(() => []);
+    if (mine !== seq) return;  // une frappe plus récente a pris le relais
+    items = found.filter((u) => u.username.toLowerCase() !== q.toLowerCase());  // nom déjà tapé en entier : Entrée valide le formulaire
+    active = 0;
+    paint();
+  };
+  input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(search, 180); });
+  input.addEventListener("keydown", (e) => {
+    if (!items.length) return;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); active = (active + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length; paint(); }
+    else if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); pickCandidate(items[active].username); }
+    else if (e.key === "Escape") { e.stopPropagation(); e.preventDefault(); hide(); }
+  });
+  input.addEventListener("blur", () => setTimeout(hide, 150));
+}
+function pickCandidate(name) {
+  const input = $("#modal input[name=identifier]");
+  if (!input) return;
+  input.value = name;
+  const pop = $("#cand-pop");
+  if (pop) { pop.hidden = true; pop.innerHTML = ""; }
+  input.focus();
 }
 
 /* ---------- messagerie ---------- */
@@ -916,8 +985,128 @@ async function pollChat() {
     state.notifs = await api.notifications();
     render();
   }
+  await pollDock().catch(() => {});
   renderSidebar();
 }
+/* ---------- mini-fenêtre de conversation (en bas à droite) ---------- */
+const dockConv = () => state.chat.convs.find((c) => c.id === state.dock.conv);
+const saveDock = () => auth.pref.set("dock", JSON.stringify(state.dock.conv ? { conv: state.dock.conv, min: state.dock.min } : null));
+
+async function dockOpen(convId, { min = false, draft = "" } = {}) {
+  const d = state.dock;
+  Object.assign(d, { conv: convId, min, messages: [], draft });
+  saveDock();
+  renderDock();
+  const r = await api.chatMessages(convId).catch(() => null);
+  if (!r || d.conv !== convId) {
+    if (!r) { d.conv = null; saveDock(); renderDock(); }  // le fil n'existe plus
+    return;
+  }
+  d.messages = r.messages;
+  if (!min) await dockMarkRead();
+  paintDockMessages(true);
+}
+
+async function dockMarkRead() {
+  const d = state.dock;
+  if (!d.conv) return;
+  await api.chatRead(d.conv).catch(() => {});
+  const c = dockConv();
+  if (c) c.unread = 0;
+  state.summary = { ...state.summary, unread_messages: unreadTotal() };
+  renderSidebar();
+  renderDockHead();
+}
+
+function dockHeadHtml() {
+  const c = dockConv();
+  const d = state.dock;
+  const unread = c?.unread || 0;
+  return `<span class="dock-ico">${c?.kind === "direct" ? avatar(c.title, "xs") : `<span class="dot" style="--h:${hue(c?.title || "")}"></span>`}</span>
+    <b class="grow ellipsis">${esc(c?.title || "")}</b>${unread ? `<span class="ncount">${unread > 99 ? "99+" : unread}</span>` : ""}
+    <button type="button" class="icon-btn" data-action="dock-expand" title="Ouvrir dans Messages" aria-label="Ouvrir dans Messages">${icon("expand", 15)}</button>
+    <button type="button" class="icon-btn" data-action="dock-close" title="Fermer" aria-label="Fermer la conversation">${icon("x", 15)}</button>`;
+}
+function renderDockHead() {
+  const h = $("#dock .dock-head");
+  if (h) h.innerHTML = dockHeadHtml();
+}
+
+function paintDockMessages(stick) {
+  const box = $("#dock-msgs");
+  const c = dockConv();
+  if (!box || !c) return;
+  const keep = box.scrollHeight - box.scrollTop;
+  box.innerHTML = state.dock.messages.length
+    ? CH.messagesHtml({ messages: state.dock.messages.map((m) => ({ ...m, can_edit: false, can_delete: false })), conv: c, meName: state.user.username, tz: myTz(), hasMore: false, esc, canWrite: false })
+    : '<p class="muted small pad">Aucun message pour l\'instant.</p>';
+  box.scrollTop = stick ? box.scrollHeight : box.scrollHeight - keep;
+  loadThumbs();
+}
+
+function renderDock() {
+  const el = $("#dock");
+  if (!el) return;
+  const d = state.dock;
+  if (state.page === "messages" && d.conv) {  // la conversation reprend sa place dans la page Messages
+    if (d.draft) state.chat.drafts[d.conv] = d.draft;
+    Object.assign(d, { conv: null, messages: [], draft: "" });
+    saveDock();
+  }
+  const c = dockConv();
+  if (!state.user || $("#app").hidden || !d.conv || !c) { el.hidden = true; el.innerHTML = ""; return; }
+  const typed = $("#dock-input")?.value ?? d.draft;
+  el.hidden = false;
+  el.innerHTML = `<section class="dock-card ${d.min ? "min" : ""}" aria-label="Conversation ${esc(c.title)}">
+    <header class="dock-head" data-action="dock-toggle" title="${d.min ? "Agrandir" : "Réduire"}">${dockHeadHtml()}</header>
+    ${d.min ? "" : `<div id="dock-msgs" class="dock-msgs"></div>
+    ${c.can_write ? `<form id="dock-form" class="dock-form" autocomplete="off"><textarea id="dock-input" rows="1" maxlength="2000" placeholder="${esc(c.kind === "direct" ? `Écrire à ${c.title}…` : "Message — @ pour mentionner")}" aria-label="Message">${esc(typed)}</textarea>
+      <button type="button" class="btn primary sm" data-action="dock-send" aria-label="Envoyer">${icon("send", 15)}</button></form>`
+      : '<p class="muted small pad">Lecture seule.</p>'}`}
+  </section>`;
+  if (!d.min) { paintDockMessages(true); }
+}
+
+async function dockSend() {
+  const d = state.dock;
+  const input = $("#dock-input");
+  const text = input?.value.trim();
+  if (!text || d.sending || !d.conv) return;
+  d.sending = true;
+  try {
+    const msg = await api.chatSend(d.conv, text);
+    input.value = "";
+    d.draft = "";
+    d.messages.push(msg);
+    const c = dockConv();
+    if (c) {
+      c.last = { author: state.user.username, excerpt: text.replace(/\s+/g, " ").slice(0, 90), created_at: msg.created_at };
+      c.unread = 0;
+    }
+    paintDockMessages(true);
+  } finally { d.sending = false; }
+  $("#dock-input")?.focus();
+}
+
+async function pollDock() {
+  const d = state.dock;
+  if (!d.conv || state.page === "messages") return;
+  const last = d.messages.length ? d.messages[d.messages.length - 1].id : 0;
+  const { messages } = await api.chatMessages(d.conv, { after: last });
+  if (messages.length) {
+    const stick = nearBottom($("#dock-msgs"));
+    d.messages.push(...messages);
+    if (!d.min) await dockMarkRead();
+    paintDockMessages(stick);
+  }
+  renderDockHead();
+}
+
+$("#dock")?.addEventListener("input", (e) => { if (e.target.id === "dock-input") state.dock.draft = e.target.value; });
+$("#dock")?.addEventListener("keydown", guard(async (e) => {
+  if (e.target.id === "dock-input" && e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); await dockSend(); }
+}));
+
 setInterval(() => pollChat().catch(() => {}), 15000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) pollChat().catch(() => {}); });
 
@@ -1020,28 +1209,25 @@ function eventModal({ ev = null, date = D.iso(state.cal.cursor), startMin = 9 * 
   const known = new Map((ev?.invitees || []).map((i) => [i.id, i]));
   const mine = ev?.my_status;
   openModal(ev ? "Événement" : "Nouvel événement", `
-    <label class="block">Titre<input name="title" required maxlength="200" value="${esc(ev?.title)}" ${dis} autofocus></label>
+    <input class="ev-title" name="title" required maxlength="200" placeholder="Titre de l'événement" aria-label="Titre" value="${esc(ev?.title)}" ${dis} autofocus>
     ${mine && mine !== "organizer" ? `<div class="rsvp"><span class="grow">${esc(ev.creator_name || "Quelqu'un")} vous a invité · vous : <b>${RSVP_LABEL[mine]}</b></span>
       <button type="button" class="btn sm ${mine === "accepted" ? "primary" : ""}" data-rsvp="accepted">Accepter</button>
       <button type="button" class="btn sm ${mine === "declined" ? "primary" : ""}" data-rsvp="declined">Refuser</button></div>` : ""}
-    <div class="when">
-      <label>Début<input type="date" name="sd" required value="${v.sd}" ${dis}></label>
-      <label>&nbsp;<input type="time" name="st" required value="${v.st}" ${dis}></label>
-      <label>Fin<input type="date" name="ed" required value="${v.ed}" ${dis}></label>
-      <label>&nbsp;<input type="time" name="et" required value="${v.et}" ${dis}></label>
+    <div class="ev-card">
+      <div class="ev-row"><span class="ev-label">${icon("clock", 15)}Début</span><input type="date" name="sd" required value="${v.sd}" ${dis}><input type="time" name="st" required value="${v.st}" ${dis}></div>
+      <div class="ev-row"><span class="ev-label">${icon("clock", 15)}Fin</span><input type="date" name="ed" required value="${v.ed}" ${dis}><input type="time" name="et" required value="${v.et}" ${dis}></div>
+      <div class="ev-row"><span class="ev-label">${icon("globe", 15)}Fuseau</span><select name="tz" class="grow" ${dis}>${zoneOptions(tz)}</select></div>
+      <p class="ev-hint">Le calendrier affiche tout en heure de ${esc(TZ.city(tz))}. Saisissez l'heure locale du lieu de l'événement : elle sera convertie.</p>
+      <div class="ev-row"><span class="ev-label">${icon("repeat", 15)}Répéter</span><select name="recurrence" class="grow" ${dis}>${RECURRENCES.map(([k, l]) => `<option value="${k}" ${(ev?.recurrence || "") === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+      <div class="ev-row" data-until ${ev?.recurrence ? "" : "hidden"}><span class="ev-label">Jusqu'au</span><input type="date" name="until" value="${ev?.recurrence_until || ""}" ${dis}><span class="muted small">facultatif</span></div>
+      ${ev?.recurrence ? '<p class="ev-hint">Événement récurrent : les modifications s\'appliquent à toute la série.</p>' : ""}
     </div>
-    <div class="rec-row">
-      <label>Répétition<select name="recurrence" ${dis}>${RECURRENCES.map(([k, l]) => `<option value="${k}" ${(ev?.recurrence || "") === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
-      <label>Jusqu'au (facultatif)<input type="date" name="until" value="${ev?.recurrence_until || ""}" ${dis}></label>
-    </div>
-    ${ev?.recurrence ? '<p class="muted small">Événement récurrent : les modifications s\'appliquent à toute la série.</p>' : ""}
-    <label class="block">Fuseau de ces horaires<select name="tz" ${dis}>${zoneOptions(tz)}</select></label>
-    <p class="muted small">Le calendrier affiche tout en heure de ${esc(TZ.city(tz))}. Saisissez ici l'heure locale du lieu de l'événement : elle sera convertie.</p>
-    <label class="block">Calendrier<select name="project" ${dis}><option value="">Personnel (vous seul)</option>${writable.map((p) =>
-      `<option value="${p.id}" ${(ev ? ev.project : state.cal.project) == p.id ? "selected" : ""}>${esc(p.name)} (partagé)</option>`).join("")}</select></label>
-    <div class="block"><span class="label-text">Invités</span><div id="invitees" class="invitees">${editable ? '<p class="muted small">Chargement…</p>'
-      : ((ev.invitees || []).length ? ev.invitees.map((i) => `<div>${avatar(i.username, "xs")} ${esc(i.username)} <span class="st">${RSVP_LABEL[i.status]}</span></div>`).join("") : '<p class="muted small">Aucun invité.</p>')}</div></div>
-    <label class="block">Description<textarea name="description" rows="3" ${dis}>${esc(ev?.description)}</textarea></label>
+    <div class="ev-field"><span class="ev-label">${icon("calendar", 15)}Calendrier</span><select name="project" class="grow" ${dis}><option value="">Personnel (vous seul)</option>${writable.map((p) =>
+      `<option value="${p.id}" ${(ev ? ev.project : state.cal.project) == p.id ? "selected" : ""}>${esc(p.name)} (partagé)</option>`).join("")}</select></div>
+    <div class="ev-field top"><span class="ev-label">${icon("users", 15)}Invités</span><div id="invitees" class="invitees">${editable ? '<p class="muted small">Chargement…</p>'
+      : ((ev.invitees || []).length ? ev.invitees.map((i) => `<div class="chip">${avatar(i.username, "xs")} ${esc(i.username)} <span class="st">${RSVP_LABEL[i.status]}</span></div>`).join("") : '<p class="muted small">Aucun invité.</p>')}</div></div>
+    <textarea class="ev-desc" name="description" rows="3" placeholder="Ajouter une description" aria-label="Description" ${dis}>${esc(ev?.description)}</textarea>
+
     ${ev && editable ? `<div class="row">${ev.recurrence ? '<button class="btn ghost danger" value="delete-one" formnovalidate>Supprimer cette occurrence</button>' : ""}
       <button class="btn ghost danger" value="delete" formnovalidate>${ev.recurrence ? "Supprimer toute la série" : "Supprimer"}</button></div>` : ""}
     ${editable ? actions(ev ? "Enregistrer" : "Créer") : `<p class="muted small">Lecture seule${ev.creator_name ? ` · créé par ${esc(ev.creator_name)}` : ""}.</p>
@@ -1056,7 +1242,7 @@ function eventModal({ ev = null, date = D.iso(state.cal.cursor), startMin = 9 * 
     if (ev) await api.updateEvent(ev.id, body); else await api.createEvent(body);
     await loadCalendar();
     render();
-  });
+  }, "ev-modal");
   const box = $("#modal");
   /* liste des invités possibles : membres du projet choisi, ou collègues pour un événement personnel */
   const paintInvitees = guard(async () => {
@@ -1069,12 +1255,13 @@ function eventModal({ ev = null, date = D.iso(state.cal.cursor), startMin = 9 * 
     const people = (pid ? (await api.members(Number(pid))).map((m) => ({ id: m.user_id, username: m.username })) : await api.calendarContacts())
       .filter((p) => p.id !== state.user.id);
     holder.dataset.ready = "1";
-    holder.innerHTML = people.length ? people.map((p) => `<label><input type="checkbox" value="${p.id}" ${(first ? known.has(p.id) : checked.has(p.id)) ? "checked" : ""}>
+    holder.innerHTML = people.length ? people.map((p) => `<label class="chip"><input type="checkbox" value="${p.id}" ${(first ? known.has(p.id) : checked.has(p.id)) ? "checked" : ""}>
       ${avatar(p.username, "xs")} <span>${esc(p.username)}</span>${known.has(p.id) ? `<span class="st">${RSVP_LABEL[known.get(p.id).status]}</span>` : ""}</label>`).join("")
       : '<p class="muted small">Personne à inviter : ajoutez des membres à un projet.</p>';
   });
   paintInvitees();
   box.querySelector('select[name="project"]')?.addEventListener("change", paintInvitees);
+  box.querySelector('select[name="recurrence"]')?.addEventListener("change", (e) => { box.querySelector("[data-until]").hidden = !e.target.value; });
   box.querySelectorAll("[data-rsvp]").forEach((b) => b.addEventListener("click", guard(async () => {
     await api.rsvp(ev.id, b.dataset.rsvp);
     box.close();
@@ -1406,7 +1593,32 @@ const handlers = {
   "mini-prev": () => { state.mini = D.addMonths(state.mini, -1); renderSidebar(); },
   "mini-next": () => { state.mini = D.addMonths(state.mini, 1); renderSidebar(); },
   "mini-day": (el) => openCalendar({ mode: state.cal.mode === "month" ? "month" : state.page === "calendar" ? state.cal.mode : "week", cursor: D.parse(el.dataset.date), data: null }),
-  members: () => membersModal(),
+  members: () => { state.newInvite = null; return membersModal(); },
+  "pick-candidate": (el) => pickCandidate(el.dataset.name),
+  "dock-toggle": async () => {
+    const d = state.dock;
+    d.min = !d.min;
+    saveDock();
+    renderDock();
+    if (!d.min) { await dockMarkRead(); paintDockMessages(true); $("#dock-input")?.focus(); }
+  },
+  "dock-send": () => dockSend(),
+  "dock-close": () => { Object.assign(state.dock, { conv: null, messages: [], draft: "" }); saveDock(); renderDock(); },
+  "dock-expand": () => { const id = state.dock.conv; return openMessages(id); },
+  "create-invite": async () => {
+    const f = Object.fromEntries(new FormData($("#modal form")));
+    state.newInvite = await api.createInvite(state.project.id, { role: f.inviteRole, days: Number(f.inviteDays), max_uses: Number(f.inviteUses) });
+    await membersModal();
+  },
+  "copy-invite": async () => {
+    const input = $("#modal .invite-new input");
+    try { await navigator.clipboard.writeText(input.value); } catch { input.select(); document.execCommand?.("copy"); }
+    toast("Lien copié.");
+  },
+  "revoke-invite": async (el) => {
+    await api.revokeInvite(state.project.id, Number(el.dataset.id));
+    await membersModal();
+  },
   "remove-member": async (el) => {
     await api.removeMember(state.project.id, Number(el.dataset.uid));
     state.members = await api.members(state.project.id);
@@ -1419,6 +1631,9 @@ const handlers = {
     auth.logout();
     state.chat = { convs: [], current: null, messages: [], hasMore: false, drafts: {}, pick: { items: [], active: 0, start: 0 }, editing: null, reactFor: null, replyTo: null, files: [], search: null, tasks: {} };
     state.summary = { unread_messages: 0, unread_notifications: 0 };
+    state.dock = { conv: null, min: false, messages: [], draft: "", sending: false };
+    auth.pref.del("dock");
+    renderDock();
     showAuth();
   },
 };
@@ -1740,18 +1955,62 @@ const admin = createAdmin({ api, state, render, openModal, actions, toast, esc }
 Object.assign(handlers, admin.handlers);
 
 /* ---------- authentification ---------- */
+const INVITE_KEY = "pending_invite";
+/** Lien d'invitation (?invite=jeton) : on garde le jeton le temps de se connecter ou de créer un compte, puis on nettoie l'adresse. */
+(function captureInvite() {
+  const m = /[?&]invite=([^&#]+)/.exec(location.search || "");
+  if (!m) return;
+  auth.pref.set(INVITE_KEY, decodeURIComponent(m[1]));
+  try { history.replaceState(null, "", location.pathname); } catch { /* adresse non modifiable */ }
+})();
+
+async function announceInvite() {
+  const box = $("#invite-banner");
+  const token = auth.pref.get(INVITE_KEY);
+  if (!box || !token) return;
+  try {
+    const i = await api.invitePreview(token);
+    const canRegister = !!$("#register-form");
+    box.innerHTML = `<b>${esc(i.inviter || "Quelqu'un")}</b> vous invite à rejoindre <b>${esc(i.project_name)}</b> en tant que ${esc(ROLE[i.role].toLowerCase())}.
+      <span class="muted">${canRegister ? "Connectez-vous ou créez un compte pour accepter." : "Connectez-vous pour accepter."}</span>`;
+    box.hidden = false;
+    if (canRegister) document.querySelector('[data-auth-tab="register"]')?.click?.();
+  } catch {
+    auth.pref.del(INVITE_KEY);
+    toast("Ce lien d'invitation n'est plus valable.");
+  }
+}
+
+/** Accepte l'invitation en attente (après connexion) ; renvoie le projet rejoint ou null. */
+async function acceptPendingInvite() {
+  const token = auth.pref.get(INVITE_KEY);
+  if (!token) return null;
+  auth.pref.del(INVITE_KEY);
+  try { return await api.acceptInvite(token); } catch { toast("Ce lien d'invitation n'est plus valable."); return null; }
+}
+
 function showAuth() {
   $("#app").hidden = true;
   $("#auth").hidden = false;
   document.querySelector('[data-auth-tab="login"]')?.click?.(); // jamais sur l'onglet Inscription après une déconnexion
+  announceInvite();
 }
 async function startApp() {
   $("#auth").hidden = true;
   $("#app").hidden = false;
   try {
     refreshTimer().catch(() => {});
+    const joined = auth.pref.get(INVITE_KEY) ? await acceptPendingInvite() : null;
     await refreshChat().catch(() => {}); // pastilles de la barre latérale ; la messagerie ne doit jamais bloquer le reste
     await loadProjects();
+    const savedDock = auth.pref.get("dock");
+    if (savedDock && savedDock !== "null") {  // la mini-fenêtre survit à un rechargement de la page
+      try { const k = JSON.parse(savedDock); if (state.chat.convs.some((c) => c.id === k.conv)) dockOpen(k.conv, { min: !!k.min }).catch(() => {}); } catch { /* valeur illisible : ignorée */ }
+    }
+    if (joined) {
+      await selectProject(joined.project_id);
+      toast(joined.already_member ? `Vous êtes déjà membre de « ${joined.project_name} ».` : `Vous avez rejoint « ${joined.project_name} ».`);
+    }
     if (location.pathname.replace(/\/$/, "") === "/admin" && state.user.is_staff) await handlers["go-admin"]();
   } catch (err) {
     $("#view").innerHTML = `<div class="empty"><h2>Impossible de charger vos données</h2><p class="muted">${esc(err.message)}</p>

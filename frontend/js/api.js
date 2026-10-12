@@ -163,6 +163,12 @@ export const api = {
   addMember: (pid, body) => request(`/projects/${pid}/members/`, { method: "POST", body }),
   setRole: (pid, uid, role) => request(`/projects/${pid}/members/${uid}/`, { method: "PATCH", body: { role } }),
   removeMember: (pid, uid) => request(`/projects/${pid}/members/${uid}/`, { method: "DELETE" }),
+  memberCandidates: (pid, q) => request(`/projects/${pid}/member-candidates/?q=${encodeURIComponent(q)}`),
+  invites: (pid) => request(`/projects/${pid}/invites/`),
+  createInvite: (pid, body) => request(`/projects/${pid}/invites/`, { method: "POST", body }),
+  revokeInvite: (pid, id) => request(`/projects/${pid}/invites/${id}/`, { method: "DELETE" }),
+  invitePreview: (token) => request(`/invites/${encodeURIComponent(token)}/`, { anon: true }),
+  acceptInvite: (token) => request(`/invites/${encodeURIComponent(token)}/accept/`, { method: "POST" }),
 
   comments: (pid, tid) => request(`/projects/${pid}/tasks/${tid}/comments/`),
   addComment: (pid, tid, content) =>

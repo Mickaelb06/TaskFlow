@@ -121,6 +121,7 @@ const routes = {
   },
   "/auth/config/": { registration_open: true },
   "/projects/": [{ id: 7, name: "Projet <b>A</b>", description: "", deadline: day(20), skip_weekends: true, owner: 1, role: "owner" }],
+  "/projects/7/invites/": [{ id: 5, role: "viewer", created_at: dt(-1), expires_at: dt(6), max_uses: 10, uses: 2 }],
   "/projects/7/members/": [{ user_id: 1, username: "alice", role: "owner" }, { user_id: 2, username: "bob", role: "member" }],
   "/projects/7/tasks/": [
     task(1, "Cadrage", { status: "done", priority: 1, start_date: day(-8), due_date: day(-4), assignee: 1, assignee_name: "alice" }),

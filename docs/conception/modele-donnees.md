@@ -24,6 +24,7 @@ erDiagram
     USER ||--o{ NOTIFICATION : "reçoit"
     CONVERSATION ||--o{ READMARK : "suivi de lecture"
     PROJECT ||--o{ MEMBERSHIP : "a pour membres"
+    PROJECT ||--o{ PROJECTINVITE : "a des liens d'invitation"
     PROJECT ||--o{ TASK : "contient"
     USER |o--o{ TASK : "est assigné à"
     TASK }o--o{ TASK : "dépend de"
@@ -288,3 +289,6 @@ sequenceDiagram
     V-->>F: JSON
     F-->>U: classement des tâches les plus risquées
 ```
+
+## Liens d'invitation (`ProjectInvite`)
+`project`, `token_hash` (SHA-256 du jeton, unique : **le jeton lui-même n'est jamais stocké**, comme un mot de passe), `role` (membre ou lecteur, jamais propriétaire), `created_by` (nullable), `created_at`, `expires_at`, `max_uses`, `uses`, `revoked`. Un lien est valable tant qu'il n'est ni révoqué, ni expiré, ni épuisé ; l'acceptation verrouille la ligne (`select_for_update`) pour que deux personnes simultanées ne dépassent pas `max_uses`.

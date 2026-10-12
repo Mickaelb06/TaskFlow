@@ -906,3 +906,70 @@ h3.sub { margin: 14px 0 6px; font-size: 13px; }
 .a-check { fill: none; stroke: var(--on-accent); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
 .empty { text-align: center; }
 .empty h2 { margin: 6px 0 4px; }
+
+
+/* ---------- fenêtre d'événement ---------- */
+.modal-card.ev-modal { width: min(540px, 94vw); padding: 24px 26px 22px; }
+.ev-modal h2 { font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+.ev-title { width: 100%; border: 0; border-bottom: 2px solid var(--border); border-radius: 0; background: transparent; padding: 6px 0 10px; font-size: 22px; font-weight: 650; letter-spacing: -0.01em; color: var(--text); }
+.ev-title::placeholder { color: color-mix(in srgb, var(--muted) 70%, transparent); font-weight: 500; }
+.ev-title:focus { outline: 0; border-bottom-color: var(--accent); }
+.ev-card { margin: 16px 0 6px; border: 1px solid var(--border); border-radius: 12px; padding: 4px 14px; background: color-mix(in srgb, var(--side) 55%, var(--bg)); }
+.ev-row, .ev-field { display: flex; align-items: center; gap: 8px; padding: 8px 0; }
+.ev-row + .ev-row, .ev-row + .ev-hint, .ev-hint + .ev-row { border-top: 1px solid var(--border); }
+.ev-row[hidden] { display: none; }
+.ev-label { display: inline-flex; align-items: center; gap: 7px; width: 94px; flex: none; font-size: 13px; font-weight: 500; color: var(--muted); }
+.ev-label svg { opacity: 0.85; }
+.ev-row input[type="date"] { flex: 1; min-width: 0; }
+.ev-row input[type="time"] { width: 104px; flex: none; }
+.ev-row input, .ev-row select, .ev-field select { font-size: 14px; color: var(--text); padding: 7px 10px; background: var(--bg); }
+.ev-hint { margin: 0; padding: 0 0 8px 102px; font-size: 12px; line-height: 1.45; color: var(--muted); }
+.ev-field { padding: 6px 0; }
+.ev-field.top { align-items: flex-start; }
+.ev-field.top .ev-label { padding-top: 7px; }
+.ev-field .grow { flex: 1; }
+.ev-modal .invitees { flex: 1; flex-direction: row; flex-wrap: wrap; gap: 6px; max-height: 120px; border: 0; padding: 0; margin: 0; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px 4px 6px; border: 1px solid var(--border); border-radius: 999px; font-size: 13px; font-weight: 450; color: var(--text); cursor: pointer; background: var(--bg); flex-direction: row; transition: background 0.12s, border-color 0.12s; }
+.chip:hover { background: var(--hover); }
+.chip input { position: absolute; opacity: 0; pointer-events: none; }
+.chip:has(input:checked) { background: color-mix(in srgb, var(--accent) 16%, var(--bg)); border-color: var(--accent); }
+.chip:has(input:focus-visible) { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); }
+.chip .st { margin-left: 2px; }
+.ev-desc { margin-top: 10px; width: 100%; border-radius: 10px; padding: 10px 12px; font-size: 14px; color: var(--text); }
+.ev-modal .rsvp { margin: 12px 0 0; }
+.ev-modal .row.end { margin-top: 18px; }
+
+/* ---------- invitation par lien ---------- */
+.invite-banner { padding: 11px 13px; border-radius: 10px; font-size: 13px; line-height: 1.5; background: color-mix(in srgb, var(--accent) 12%, var(--bg)); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+.invite-new { display: flex; gap: 8px; margin: 8px 0 4px; }
+.invite-new input { flex: 1; font-size: 13px; padding: 8px 10px; color: var(--text); font-family: ui-monospace, Menlo, monospace; }
+.invite-make { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.invite-make select { font-size: 13px; padding: 6px 8px; color: var(--text); }
+.invite-list { margin-top: 10px; border: 1px solid var(--border); border-radius: 10px; padding: 2px 10px; }
+.invite-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 13px; }
+.invite-row + .invite-row { border-top: 1px solid var(--border); }
+@media (max-width: 520px) { .ev-label { width: 78px; } .ev-hint { padding-left: 0; } .ev-row input[type="time"] { width: 92px; } }
+
+/* ---------- recherche d'un compte à ajouter ---------- */
+.cand-wrap { position: relative; flex: 1; min-width: 0; }
+.cand-wrap input { width: 100%; }
+.cand-pop { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 20; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); padding: 4px; max-height: 220px; overflow-y: auto; }
+.cand { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; padding: 7px 9px; border-radius: 7px; font-size: 14px; color: var(--text); }
+.cand:hover, .cand.on { background: color-mix(in srgb, var(--accent) 14%, var(--bg)); }
+
+/* ---------- mini-fenêtre de conversation ---------- */
+.dock { position: fixed; right: 20px; bottom: 0; z-index: 30; width: min(340px, calc(100vw - 24px)); }
+body:has(#panel.open) .dock { right: 380px; }
+.dock[hidden] { display: none; }
+.dock-card { display: flex; flex-direction: column; background: var(--bg); border: 1px solid var(--border); border-bottom: 0; border-radius: 14px 14px 0 0; box-shadow: var(--shadow); overflow: hidden; animation: pop 0.18s var(--ease); }
+.dock-head { display: flex; align-items: center; gap: 8px; padding: 10px 10px 10px 14px; background: var(--side); border-bottom: 1px solid var(--border); cursor: pointer; font-size: 14px; user-select: none; }
+.dock-card.min .dock-head { border-bottom: 0; }
+.dock-head:hover { background: color-mix(in srgb, var(--accent) 10%, var(--side)); }
+.dock-ico { display: inline-grid; place-items: center; }
+.dock-msgs { height: 330px; overflow-y: auto; padding: 10px 12px 4px; font-size: 13px; }
+.dock-msgs .cmsg-tools { display: none; }
+.dock-msgs .cmsg-quote, .dock-msgs .react { pointer-events: none; }
+.dock-form { display: flex; gap: 6px; align-items: flex-end; padding: 8px 10px 10px; border-top: 1px solid var(--border); }
+.dock-form textarea { flex: 1; resize: none; min-height: 34px; max-height: 96px; font-size: 13px; padding: 8px 10px; border-radius: 10px; color: var(--text); }
+.dock-form .btn { height: 34px; width: 38px; justify-content: center; padding: 0; }
+@media (max-width: 700px) { .dock { right: 8px; } body:has(#panel.open) .dock { right: 8px; } }

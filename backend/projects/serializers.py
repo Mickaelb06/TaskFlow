@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Membership, Project
+from .models import Membership, Project, ProjectInvite
 from .services import get_role
 
 
@@ -32,3 +32,15 @@ class AddMemberSerializer(serializers.Serializer):
 
 class RoleSerializer(serializers.Serializer):
     role = serializers.ChoiceField(choices=Membership.Role.choices)
+
+
+class InviteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProjectInvite
+        fields = ["id", "role", "created_at", "expires_at", "max_uses", "uses"]
+
+
+class CreateInviteSerializer(serializers.Serializer):
+    role = serializers.ChoiceField(choices=[("member", "Membre"), ("viewer", "Lecteur")], default="member")
+    days = serializers.IntegerField(default=7)
+    max_uses = serializers.IntegerField(default=10)

@@ -5,12 +5,14 @@ from rest_framework.views import APIView
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from . import services, templates
 from .mixins import ProjectScopedMixin
 from .models import Membership, Project, ProjectTemplate
-from .serializers import AddMemberSerializer, MembershipSerializer, ProjectSerializer, RoleSerializer
+from .serializers import (AddMemberSerializer, CreateInviteSerializer, InviteSerializer, MembershipSerializer,
+                          ProjectSerializer, RoleSerializer)
 
 
 class ProjectViewSet(viewsets.ModelViewSet):
@@ -119,3 +121,58 @@ class FromTemplateView(APIView):
             return Response({"start_date": "Date attendue (AAAA-MM-JJ)."}, status=400)
         project = templates.create_from_template(request.user, request.data.get("template"), request.data.get("name"), start)
         return Response(ProjectSerializer(project, context={"request": request}).data, status=201)
+
+
+class ProjectInviteView(ProjectScopedMixin, APIView):
+    """GET : liens actifs du projet ; POST : en créer un (le jeton n'est renvoyé qu'ici). Propriétaire seulement."""
+
+    write_roles = (Membership.Role.OWNER,)
+
+    def get(self, request, project_pk):
+        return Response(InviteSerializer(services.list_invites(request.user, self.project), many=True).data)
+
+    def post(self, request, project_pk):
+        data = CreateInviteSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        invite, token = services.create_invite(request.user, self.project, **data.validated_data)
+        return Response({**InviteSerializer(invite).data, "token": token}, status=status.HTTP_201_CREATED)
+
+
+class ProjectInviteDetailView(ProjectScopedMixin, APIView):
+    write_roles = (Membership.Role.OWNER,)
+
+    def delete(self, request, project_pk, invite_id):
+        services.revoke_invite(request.user, self.project, invite_id)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class InvitePreviewView(APIView):
+    """GET /invites/{jeton}/ : public (la page d'inscription annonce le projet). 404 identique pour tout jeton non valable."""
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_scope = "invite"
+
+    def get(self, request, token):
+        invite = services.find_invite(token)
+        return Response({"project_name": invite.project.name, "role": invite.role,
+                         "inviter": invite.created_by.username if invite.created_by else None})
+
+
+class InviteAcceptView(APIView):
+    throttle_scope = "invite"
+
+    def post(self, request, token):
+        project, already = services.accept_invite(request.user, token)
+        return Response({"project_id": project.pk, "project_name": project.name, "already_member": already})
+
+
+class MemberCandidatesView(ProjectScopedMixin, APIView):
+    """GET /projects/{id}/member-candidates/?q=le : propositions pour l'ajout par nom (propriétaire seulement)."""
+
+    write_roles = (Membership.Role.OWNER,)
+    throttle_scope = "search"
+
+    def get(self, request, project_pk):
+        users = services.search_candidates(request.user, self.project, request.query_params.get("q"))
+        return Response([{"id": u.pk, "username": u.username} for u in users])

@@ -40,9 +40,9 @@ docker compose up --build                  # tout, sur :8080
 - `Comment.author` est nullable (`SET_NULL`) : un compte supprimé laisse ses commentaires, affichés « Utilisateur supprimé ».
 
 ## Tests
-- Backend : `cd backend && python manage.py test` (321 tests, ~15 s : hachage MD5 en test seulement ; aucun appel réseau). Les limites de débit utilisent le cache : **`cache.clear()` dans `setUp`** des tests qui envoient beaucoup de requêtes. Les e-mails partent à `transaction.on_commit` : tests avec `self.captureOnCommitCallbacks(execute=True)` ; `django.core.mail.outbox`.
-- E2E : `./test-e2e.sh` (Selenium + Firefox, vrai navigateur, 30 scénarios ; démarre sa propre API sur :8010 et son front sur :5180, base temporaire). Les tests réagissent à des repeints du DOM : utiliser les aides qui réessaient (`open_conv`, `has_text`) contre les `StaleElementReferenceException`.
-- Front : `./test-front.sh` (198 vérifications) — `frontend/tests/stub.js` simule le DOM et l'API ; **ce n'est pas un test E2E** : le rendu visuel, les gestes à la souris et les modales ne sont vérifiés que par `./test-e2e.sh`. Ajouter une vérification à `smoke.test.js` pour chaque nouvelle vue **et** un scénario E2E pour chaque nouveau geste.
+- Backend : `cd backend && python manage.py test` (338 tests, ~15 s : hachage MD5 en test seulement ; aucun appel réseau). Les limites de débit utilisent le cache : **`cache.clear()` dans `setUp`** des tests qui envoient beaucoup de requêtes. Les e-mails partent à `transaction.on_commit` : tests avec `self.captureOnCommitCallbacks(execute=True)` ; `django.core.mail.outbox`.
+- E2E : `./test-e2e.sh` (Selenium + Firefox, vrai navigateur, 33 scénarios ; démarre sa propre API sur :8010 et son front sur :5180, base temporaire). Les tests réagissent à des repeints du DOM : utiliser les aides qui réessaient (`open_conv`, `has_text`) contre les `StaleElementReferenceException`.
+- Front : `./test-front.sh` (204 vérifications) — `frontend/tests/stub.js` simule le DOM et l'API ; **ce n'est pas un test E2E** : le rendu visuel, les gestes à la souris et les modales ne sont vérifiés que par `./test-e2e.sh`. Ajouter une vérification à `smoke.test.js` pour chaque nouvelle vue **et** un scénario E2E pour chaque nouveau geste.
 - Captures d'écran pour juger le rendu : Firefox headless sur une copie du front (`firefox --headless --no-remote --profile <dossier neuf> --screenshot …`) ; **profil neuf à chaque fois** sinon le cache sert d'anciens fichiers.
 
 ## Tableaux de bord
@@ -80,10 +80,16 @@ Palette **crème et brun** (clair) / **espresso** (sombre), définie uniquement 
 - **Modèles** (`projects/templates.py`) : décalages en jours (ouvrés si le modèle l'est) ; chaque modèle fourni est vérifié par un test (aucune tâche ne commence avant la fin de ses prérequis) — en ajouter un = laisser ce test le valider.
 
 ## Compte et sécurité — règles
+- **Mini-fenêtre de conversation** (`#dock`, `app.js` section « mini-fenêtre ») : `render()` est un enrobage de `renderPage()` ; quitter Messages avec un fil ouvert l'y place (`dockOpen`), revenir dans Messages la retire (le brouillon passe dans `state.chat.drafts`). Elle a **son propre état** (`state.dock`, ses messages) et n'utilise aucun id de la page Messages ; messages affichés sans outils (`canWrite:false`, `can_edit/can_delete:false`). Persistée dans `localStorage.dock`, relevée par `pollChat` (`pollDock`).
+- **Ajout par `@nom`** : `GET /projects/{id}/member-candidates/?q=` (propriétaire seulement, préfixe de nom, jamais d'annuaire complet) ; `wireCandidates` dans `app.js`.
+- **Liens d'invitation** (`ProjectInvite`, `projects/services.py`) : jeton jamais stocké (empreinte SHA-256), renvoyé une seule fois à la création ; rôle membre/lecteur seulement ; **404 identique** pour tout jeton non valable ; l'acceptation passe par `select_for_update`. Front : `?invite=jeton` → `localStorage.pending_invite`, adresse nettoyée, bandeau sur l'écran de connexion, acceptation après connexion/inscription (`acceptPendingInvite`, `startApp`).
 - Limites de débit par `throttle_scope` (réglables par variables d'environnement) ; `login` limite par IP (et compte aussi les bons mots de passe une fois la limite atteinte). Derrière un proxy, régler `NUM_PROXIES`.
 - Suppression de son compte : mot de passe exigé, refusée si dernier admin ou propriétaire d'un projet partagé (→ `POST /projects/{id}/transfer/`) ; projets solo supprimés ; messages/commentaires/temps conservés, signés « Utilisateur supprimé » ; ligne d'audit `user.self_delete`.
 - E-mails : jamais bloquants (`fail_silently=False` mais exception journalisée), texte brut, 1 e-mail de mention par fil et par 10 min, préférence `Profile.notify_email` ; résumé : `send_digest`.
 - PWA : `sw.js` « réseau d'abord », n'enregistre rien de `/api/`, **enregistré seulement hors localhost** (sinon risque de code périmé en développement).
+
+## Page vitrine
+`frontend/vitrine/` : `index.html` (page commerciale, ton orienté bénéfices), `vitrine.css`, `img/` (captures de l'application). Pas de page « jury ». Rien d'inventé : pas de témoignage, de prix ni de chiffre d'usage fictif. Captures : Firefox headless (profil neuf) sur le compte démo.
 
 ## Conventions
 - Langue : **français** (UI, commentaires, docs, messages d'erreur). Code identifiants en anglais.
