@@ -111,6 +111,7 @@ cd backend/planning_rs && cargo test --lib  # 8 tests Rust
 | Calendrier | les jours suivent le fuseau du profil (23 h 30 à Paris = lendemain à Tokyo) | événement présent / absent |
 | Calendrier | filtres projet et « mes tâches » ; aucun contenu d'un tiers ; périodes invalides (absentes, inversées, > 62 jours) | 400 / 404 |
 | API planification | lecteur : insights OK, replan 403 ; étranger : 404 | droits |
+| E-mail par l'API Resend | message envoyé avec la clé en en-tête ; erreur réseau levée ou ignorée selon `fail_silently` | e-mails (`accounts/test_resend.py`) |
 | Commande `promote_admin` | promeut un compte existant (insensible à la casse) ; compte inconnu : erreur, rien créé | premier admin (`accounts/test_promote.py`) |
 | Configuration `DATABASE_URL` | adresse PostgreSQL décodée (mot de passe encodé, port par défaut) ; autre moteur refusé | déploiement (`taskflow/test_dburl.py`) |
 

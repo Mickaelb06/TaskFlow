@@ -69,6 +69,12 @@ Chaque service se construit à partir de son Dockerfile (`backend/railway.json`,
 
 Points de vigilance : un seul worker gunicorn (+ 8 fils) pour que les limites de débit, stockées en mémoire, restent communes ; sauvegarder la base (`pg_dump`) et le volume ; la configuration n'a pas encore été exécutée sur Railway ni avec Docker (non installé sur la machine de développement).
 
+## E-mails sur Railway (Resend)
+Railway bloque le SMTP sortant sur les offres Trial/Hobby : on utilise l'API HTTP de Resend (`accounts/resend_backend.py`, sans dépendance).
+1. Créer un compte sur resend.com, ajouter et vérifier un domaine (enregistrements DNS SPF/DKIM) — sans domaine vérifié, Resend n'envoie qu'à l'adresse du titulaire du compte.
+2. Variables du service : `EMAIL_BACKEND=accounts.resend_backend.ResendEmailBackend`, `RESEND_API_KEY=re_…`, `DEFAULT_FROM_EMAIL=TaskFlow <no-reply@votre-domaine>`.
+3. Test : s'inviter soi-même à un événement ou se mentionner depuis un second compte.
+
 ## Image de l'API
 `backend/Dockerfile` : étape 1 compile le module Rust (rustup + maturin, roue abi3, `cargo test` inclus), étape 2 installe la roue dans une image Python sans compilateur. Si le module est absent, l'application tourne avec la version Python (visible dans `/health/` → `planning_engine`).
 
