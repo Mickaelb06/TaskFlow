@@ -42,6 +42,18 @@ Un projet à un seul membre est un projet **solo**.
 | F28 | Messagerie interne : un fil par projet (équipe) ou bloc-notes personnel (projet solo), conversations directes entre collègues, messages datés dans le fuseau de l'utilisateur, suppression par l'auteur (ou le propriétaire du projet), historique paginé | Must |
 | F29 | Mentions `@nom` et `@tous` → notifications (cloche + page dédiée), pastilles de messages non lus ; aucune mention possible hors des participants | Must |
 | F30 | Barre latérale repensée : navigation principale (tableau de bord, calendrier, messages), projets avec pastilles, administration/thème/déconnexion en pied, repliable | Should |
+| F31 | Calendrier interactif : déplacer, redimensionner et créer des événements à la souris ; événements récurrents (jour, jours ouvrés, semaine, mois) ; suppression d'une occurrence ou de la série | Must |
+| F32 | Invitations à un événement avec réponse (accepter / refuser) et notification | Should |
+| F33 | Messagerie enrichie : réponse citée, modification, réactions, pièces jointes (3 × 5 Mo, contenu vérifié), recherche, citation de tâche par `#` | Should |
+| F34 | Jours ouvrés par projet (durées et décalages sans week-ends) | Should |
+| F35 | Tâches récurrentes : la suivante est créée à la fin de la précédente | Should |
+| F36 | Charge d'équipe par semaine avec propositions de rééquilibrage ; simulation de retard « et si ? » (module Rust) | Should |
+| F37 | Suivi du temps : chrono unique, saisie manuelle, synthèse par membre | Should |
+| F38 | Modèles de projet (fournis et personnels) | Could |
+| F39 | Compte : export des données (RGPD), suppression par l'utilisateur, cession de propriété de projet | Must |
+| F40 | Notifications : e-mails (mention, invitation), résumé du matin, notifications du navigateur, préférences | Should |
+| F41 | Limitation de débit (connexion, inscription, messages, compte) | Must |
+| F42 | Application installable (PWA), démarrage hors connexion | Could |
 | F27 | Fuseaux horaires : fuseau principal par utilisateur, second fuseau en colonne d'heures, événement saisi dans n'importe quel fuseau, heure d'été gérée | Must |
 | F7 | Glisser-déposer : changer l'échéance ou le statut | Should |
 | F8 | Commentaires sur une tâche | Should |
@@ -54,7 +66,7 @@ Un projet à un seul membre est un projet **solo**.
 - **Exactitude des dates** : les calculs de dates sont déterministes et testés ; les instants sont stockés en UTC et convertis à l'affichage (changement d'heure compris).
 - **Maintenabilité** : architecture en couches, tests automatisés, CI.
 - **Accessibilité** : navigation clavier, contrastes, libellés ARIA sur les boutons icônes.
-- **RGPD** : données minimales (nom d'utilisateur, email), suppression de compte possible (à implémenter).
+- **RGPD** : données minimales (nom d'utilisateur, email) ; export et suppression de son compte par l'utilisateur (F39) ; messages et commentaires conservés sous « Utilisateur supprimé ».
 - **Portabilité** : déploiement reproductible avec Docker Compose.
 
 ## 5. Contraintes techniques

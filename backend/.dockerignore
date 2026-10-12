@@ -2,3 +2,4 @@
 planning_rs/target/
 __pycache__/
 db.sqlite3
+media/

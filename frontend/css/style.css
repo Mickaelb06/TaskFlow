@@ -287,7 +287,7 @@ button.risk:hover { background: var(--hover); }
 .g-day.wk { background: color-mix(in srgb, var(--hover) 70%, transparent); }
 .g-day.today { color: var(--today); font-weight: 700; }
 .g-body { display: flex; width: max-content; }
-.g-names { position: sticky; left: 0; z-index: 4; flex: none; width: 260px; background: var(--bg); border-right: 1px solid var(--border); }
+.g-names { position: sticky; left: 0; z-index: 9; flex: none; width: 260px; background: var(--bg); border-right: 1px solid var(--border); }
 .g-name { display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent); cursor: pointer; font-size: 13px; }
 .g-name:hover { background: var(--hover); }
 .g-name.done { color: var(--muted); }
@@ -894,3 +894,15 @@ h3.sub { margin: 14px 0 6px; font-size: 13px; }
 .sim-bar i.hot { background: var(--today); }
 .sim-val { width: 90px; text-align: right; font-weight: 600; flex: none; }
 .sim-pushed { width: 130px; text-align: right; flex: none; }
+
+
+/* illustrations des écrans vides */
+.art { display: block; margin: 0 auto 10px; }
+.a-main { fill: color-mix(in srgb, var(--accent) 16%, var(--bg)); stroke: color-mix(in srgb, var(--accent) 35%, transparent); stroke-width: 1.5; }
+.a-accent { fill: var(--accent); }
+.a-amber { fill: var(--amber); }
+.a-light { fill: color-mix(in srgb, var(--accent) 38%, var(--bg)); }
+.a-light2 { fill: color-mix(in srgb, var(--on-accent) 55%, transparent); }
+.a-check { fill: none; stroke: var(--on-accent); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.empty { text-align: center; }
+.empty h2 { margin: 6px 0 4px; }

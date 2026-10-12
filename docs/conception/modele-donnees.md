@@ -7,6 +7,16 @@ Les diagrammes sont en Mermaid (rendus automatiquement par GitHub).
 erDiagram
     USER ||--o{ PROJECT : "possède"
     USER ||--o{ MEMBERSHIP : "participe"
+    TASK ||--o{ TIMEENTRY : "temps passé"
+    USER |o--o{ TIMEENTRY : "saisit"
+    USER ||--o{ PROJECTTEMPLATE : "enregistre"
+    EVENT ||--o{ INVITATION : "invite"
+    USER ||--o{ INVITATION : "reçoit"
+    EVENT ||--o{ EVENTSKIP : "occurrences supprimées"
+    MESSAGE ||--o{ REACTION : "reçoit"
+    MESSAGE ||--o{ ATTACHMENT : "joint"
+    MESSAGE |o--o{ MESSAGE : "répond à"
+    TASK |o--o{ TASK : "récurrence (suivante)"
     PROJECT ||--o| CONVERSATION : "a un fil"
     CONVERSATION ||--o{ MESSAGE : "contient"
     MESSAGE }o--o{ USER : "mentionne"
@@ -65,6 +75,8 @@ erDiagram
               int author_id FK "nullable"
               text content "2000 car. max"
               bool mentions_all
+              int reply_to_id FK "nullable"
+              datetime edited_at "nullable"
               datetime created_at }
     NOTIFICATION { int id PK
                    int user_id FK
@@ -75,10 +87,42 @@ erDiagram
                int conversation_id FK
                int user_id FK
                int last_read_id "dernier message lu" }
+    TIMEENTRY { int id PK
+                int task_id FK
+                int user_id FK "nullable"
+                date day
+                int minutes "null = chrono en cours"
+                datetime started_at "nullable"
+                string note }
+    PROJECTTEMPLATE { int id PK
+                      int owner_id FK
+                      string name
+                      bool skip_weekends
+                      json tasks "décalages relatifs, dépendances" }
+    INVITATION { int id PK
+                 int event_id FK
+                 int user_id FK
+                 string status "invited | accepted | declined"
+                 datetime seen_at "nullable" }
+    EVENTSKIP { int id PK
+                int event_id FK
+                date day "occurrence supprimée" }
+    REACTION { int id PK
+               int message_id FK
+               int user_id FK
+               string emoji }
+    ATTACHMENT { int id PK
+                 int message_id FK
+                 string file "nom aléatoire"
+                 string name "nom d'origine, affiché seulement"
+                 string content_type "vérifié sur le contenu"
+                 int size }
     PROFILE { int id PK
               int user_id FK "1-1"
               string timezone "IANA, défaut Europe/Paris"
-              string secondary_timezone "optionnel : 2e colonne d'heures" }
+              string secondary_timezone "optionnel : 2e colonne d'heures"
+              bool notify_email
+              bool digest_email }
     EVENT { int id PK
             int project_id FK "nullable : vide = personnel"
             int creator_id FK "nullable"
@@ -86,7 +130,9 @@ erDiagram
             text description
             datetime starts_at "UTC"
             datetime ends_at "UTC, > starts_at (CHECK)"
-            string timezone "fuseau de saisie, informatif"
+            string timezone "fuseau de saisie ; sert aussi à la récurrence"
+            string recurrence "daily | weekdays | weekly | monthly"
+            date recurrence_until "nullable"
             datetime created_at }
     COMMENT { int id PK
               int task_id FK
@@ -94,7 +140,7 @@ erDiagram
               text content
               datetime created_at }
 ```
-Contraintes : `MEMBERSHIP (project_id, user_id)` unique ; `TASK.start_date <= due_date` (CHECK) ; table de liaison `task_dependencies` (auto-association N:N, boucles interdites côté service) ; `TASK.priority` entre 1 et 3 (CHECK) ; suppression d'un projet → cascade sur membres, tâches, commentaires ; retrait d'un membre → ses tâches redeviennent non assignées.
+Contraintes : `TIMEENTRY` : durée ≤ 24 h et soit `minutes` soit `started_at` renseigné (CHECK) ; `INVITATION (event_id, user_id)` unique ; `REACTION (message, user, emoji)` unique ; `MEMBERSHIP (project_id, user_id)` unique ; `TASK.start_date <= due_date` (CHECK) ; table de liaison `task_dependencies` (auto-association N:N, boucles interdites côté service) ; `TASK.priority` entre 1 et 3 (CHECK) ; suppression d'un projet → cascade sur membres, tâches, commentaires ; retrait d'un membre → ses tâches redeviennent non assignées.
 
 Implémentation : `backend/projects/models.py`, `backend/tasks/models.py`, migrations associées.
 
@@ -221,4 +267,24 @@ sequenceDiagram
     B->>F: clic sur la notification
     F->>V: POST /notifications/ {ids:[…]} puis GET messages
     V->>S: marquer lue ; ouvrir le fil (marque le fil comme lu)
+```
+
+## Séquence : simulation « et si cette tâche prenait du retard ? »
+```mermaid
+sequenceDiagram
+    actor U as Utilisateur
+    participant F as Front (onglet Charge)
+    participant V as SimulateView
+    participant P as planning.delay_simulation
+    participant E as moteur (Rust)
+    U->>F: choisit « retard de 5 jours »
+    F->>V: GET /projects/7/simulate/?delay=5
+    V->>P: delay_simulation(projet, 5)
+    P->>P: tâches → nœuds (jours ouvrés si le projet les utilise)
+    P->>E: delay_impacts(nœuds, aujourd'hui, 5)
+    Note over E: une passe de prévision par tâche ouverte (O(n²)), sans retourner en Python entre deux
+    E-->>P: [(id, recul de la fin, tâches repoussées)] trié
+    P-->>V: titres, responsables, « absorbé » ou « +N j »
+    V-->>F: JSON
+    F-->>U: classement des tâches les plus risquées
 ```

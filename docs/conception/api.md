@@ -51,6 +51,56 @@ Champs de tâche ajoutés : `start_date`, `due_date`, `is_milestone`, `dependenc
 
 **Mentions** : `@nom` (sans casse) désigne un participant du fil ; `@tous` / `@all` prévient tous les autres dans un fil de projet de 3 personnes ou plus. Un `@` collé à un mot (`jean@x.fr`), un inconnu, un non-participant ou soi-même ne notifie personne. Le contenu est stocké brut : c'est le front qui l'échappe.
 
+## Calendrier — récurrence et invitations
+`POST/PATCH /events/` acceptent en plus : `recurrence` (`""`, `daily`, `weekdays`, `weekly`, `monthly`), `recurrence_until` (date), `attendees` (liste d'identifiants, **remplace** la liste des invités ; absent = inchangée). Un événement récurrent dure moins d'un jour. Les réponses ajoutent `invitees[]` (`{id, username, status}`), `my_status` (`organizer | invited | accepted | declined | null`), `occurrence_day`, `series_starts_at`, `series_ends_at`.
+
+| Méthode | Route | Description |
+|---|---|---|
+| GET | `/calendar/?from&to` | Renvoie les **occurrences** des séries comprises dans la période (une ligne par occurrence, avec `occurrence_day`) ; modifier une occurrence modifie la série (envoyer les horaires `series_*`) |
+| POST | `/events/{id}/rsvp/` | `{status: accepted \| declined}` — réservé aux invités (403 sinon, 404 si invisible) |
+| POST | `/events/{id}/skip/` | `{day}` — supprime UNE occurrence (204, idempotent ; 400 si ce n'est pas une occurrence) |
+| GET | `/calendar/contacts/` | Personnes invitables à un événement personnel (partageant un projet) |
+
+## Messagerie — compléments
+| Méthode | Route | Description |
+|---|---|---|
+| PATCH | `/chat/messages/{id}/` | `{content}` — auteur seulement (403 pour les autres, y compris le propriétaire du projet) ; marque `edited` ; ne renotifie que les nouvelles mentions |
+| POST | `/chat/messages/{id}/reactions/` | `{emoji}` parmi 👍 ❤️ 😂 🎉 👀 ✅ — bascule (ajoute / retire) ma réaction ; lecteur : 403 |
+| POST | `/chat/conversations/{id}/messages/` | JSON `{content, reply_to?}` **ou** multipart `content`, `reply_to`, `files` (3 au plus, 5 Mo chacun ; images, PDF, TXT, CSV, DOCX, XLSX, PPTX, ODT ; refus si le contenu ne correspond pas à l'extension) |
+| GET | `/chat/attachments/{id}/` | Télécharge un fichier (jeton requis, lecteurs du fil seulement) — images en ligne, le reste en téléchargement ; `nosniff`, CSP `sandbox` |
+| GET | `/chat/search/?q=&conversation=` | Messages contenant `q` (≥ 2 caractères) dans mes conversations, 30 résultats, plus récents d'abord |
+| GET | `/chat/conversations/{id}/messages/?around=id` | Le message visé avec ses 20 précédents et 30 suivants (ouverture d'un résultat de recherche) |
+
+Les messages contiennent maintenant `edited`, `can_edit`, `reply_to {id, author, excerpt}`, `reactions[] {emoji, count, mine, users}`, `attachments[] {id, name, size, content_type, image}` et `tasks[] {id, title, status, project}` (tâches citées par `#id`, **du projet du fil uniquement**). `GET /notifications/` renvoie aussi les invitations (`type: invite`) ; `POST /notifications/` accepte `{ids, invitations}` ou `{all: true}`.
+
+## Gestion de projet — compléments
+| Méthode | Route | Description |
+|---|---|---|
+| PATCH | `/projects/{id}/` | accepte `skip_weekends` (propriétaire) : jours ouvrés |
+| POST | `/projects/{id}/transfer/` | `{user_id}` — le propriétaire cède le projet à un membre |
+| POST | `/projects/{id}/save-template/` | `{name, description?}` — enregistre la structure comme modèle (propriétaire ; 20 modèles au plus) |
+| GET | `/templates/` | modèles fournis (`builtin:site-web`, `evenement`, `sprint`, `lancement`) + les miens |
+| DELETE | `/templates/{id}/` | supprimer un de mes modèles (404 pour ceux d'autrui) |
+| POST | `/projects/from-template/` | `{template, name?, start_date?}` → projet créé (201) avec tâches, dates et dépendances |
+| GET | `/projects/{id}/workload/?weeks=4` | charge par membre et par semaine (`percent`, `days`, `tasks`) + `suggestions[]` de rééquilibrage (1 à 12 semaines) |
+| GET | `/projects/{id}/simulate/?delay=3` | pour chaque tâche ouverte : recul de la fin du projet si elle prend `delay` jours de plus (1 à 60) — **calculé par le moteur Rust** |
+| GET, POST | `/projects/{id}/tasks/{tid}/time/` | saisies de temps + total ; POST `{minutes, day?, note?}` (1 à 1 440 min) |
+| POST | `/projects/{id}/tasks/{tid}/time/start/` | démarre le chrono (arrête celui qui tournait) |
+| DELETE | `/projects/{id}/tasks/{tid}/time/{entry}/` | supprimer sa saisie (le propriétaire peut supprimer celles des autres) |
+| GET, POST | `/timer/` | mon chrono en cours (ou `null`) ; POST l'arrête |
+| GET | `/projects/{id}/time-report/?from&to` | temps passé : total, par membre, par tâche, par jour (30 jours par défaut) |
+
+Les tâches ajoutent `recurrence` (`""`, `daily`, `weekdays`, `weekly`, `monthly`), `recurrence_of` (lecture seule) et `time_minutes` (lecture seule).
+
+## Compte et limitation de débit
+| Méthode | Route | Description |
+|---|---|---|
+| PATCH | `/me/` | `timezone`, `secondary_timezone`, `notify_email`, `digest_email` |
+| GET | `/me/export/` | toutes mes données en JSON (téléchargement) |
+| DELETE | `/me/` | `{password}` — supprime mon compte (400 si mot de passe faux, dernier administrateur, ou propriétaire d'un projet partagé) |
+
+**429** quand une limite est dépassée : `login` 10/min par adresse IP, `register` 10/h, `chat` 60/min (écritures seulement), `account` 10/h (export, suppression). Réglables par variables d'environnement.
+
 ## Administration (`/api/admin/…` — comptes `is_staff` actifs uniquement : 401 sans connexion, 403 sinon)
 | Méthode | Route | Description |
 |---|---|---|

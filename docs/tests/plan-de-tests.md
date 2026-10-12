@@ -1,13 +1,17 @@
 # Plan de tests
 
 ## Stratégie
-- **Tests d'API automatisés** (DRF `APITestCase`, base isolée) : 158 tests (+ 7 tests Rust), exécutés à chaque push par la CI.
-- **Tests manuels** du front selon les scénarios ci-dessous.
+- **Tests d'API automatisés** (DRF `APITestCase`, base isolée) : 321 tests (+ 8 tests Rust), exécutés à chaque push par la CI.
+- **Tests du front** sur un faux navigateur (198 vérifications) et **tests de bout en bout dans un vrai navigateur** (Firefox + Selenium, 30 scénarios, job CI dédié).
+- **Tests manuels** du front selon les scénarios ci-dessous (ce que l'automatisation ne juge pas : la qualité visuelle).
 - Priorité aux **règles métier et aux droits**, là où les régressions sont les plus graves.
 
 ## Exécution
 ```bash
-cd backend && python manage.py test
+cd backend && python manage.py test        # 321 tests (~15 s)
+cd backend/planning_rs && cargo test --lib  # 8 tests Rust
+./test-front.sh                              # 198 vérifications (faux navigateur, macOS)
+./test-e2e.sh                                # 30 scénarios Firefox + Selenium (pip install selenium)
 ```
 
 ## Cas de test automatisés
@@ -71,6 +75,25 @@ cd backend && python manage.py test
 | Non lus | ses propres messages ne comptent pas ; lecture remet à zéro ; répondre = avoir lu | compteurs |
 | Messages directs | paire unique dans les deux sens (par id ou nom) ; projet commun obligatoire (404 identique à « inconnu ») ; ni soi-même (400) ni compte inactif ; invisible des tiers ; `@tous` ignoré | 200 / 404 / 400 |
 | Messagerie — cycle de vie | suppression d'un projet → son fil ; suppression d'un utilisateur → messages de projet conservés (« Utilisateur supprimé »), conversations directes supprimées | cascade |
+| Limites de débit | 11 connexions ratées → 429, y compris avec le bon mot de passe ensuite ; inscription limitée ; envoi de messages limité (61e → 429) mais lecture jamais ; changement de fuseau jamais limité | codes |
+| Compte | export (mes données seulement, aucun mot de passe) ; suppression : mot de passe exigé, refus (dernier admin, projet partagé), projets solo supprimés, contenu conservé « Utilisateur supprimé », audit sans secret, limitée | 204 / 400 / 429 |
+| Cession de projet | transfert à un membre ; refus pour un non-membre, soi-même, un non-propriétaire | 200 / 400 / 403 / 404 |
+| Messagerie — enrichie | modification (auteur seul, mentions nouvelles seulement) ; réponse citée (même fil) et survie à la suppression du message cité | 200 / 400 / 403 |
+| Messagerie — réactions | bascule, compteurs, 6 émojis autorisés, lecteur et étranger refusés | 200 / 400 / 403 / 404 |
+| Messagerie — `#tâche` | tâche du projet liée ; autre projet jamais exposé ; rien en direct ; entités HTML ignorées | liste de tâches |
+| Messagerie — recherche | seulement mes conversations, plus récent d'abord, requête courte refusée, `around` (résultat + contexte) | listes / 400 |
+| Pièces jointes | envoi et téléchargement par les participants seulement (401/404), PDF en téléchargement, `nosniff` + CSP ; types dangereux refusés quel que soit le type annoncé ; contenu ≠ extension refusé ; limites 5 Mo / 3 fichiers ; nom d'origine jamais utilisé comme chemin ; fichier supprimé avec le message | 201 / 400 / 403 / 404 |
+| Calendrier — récurrence | jour / jours ouvrés / semaine / mois ; 31 saute les mois courts ; fin, horizon 3 ans, plage lointaine ; heure murale conservée à travers le changement d'heure et dans un fuseau étranger ; déplacer la série ; supprimer une occurrence (idempotent) ; validations | dates exactes |
+| Calendrier — invitations | invité voit sans modifier ; notification ; réponses ; règles d'invitation (membres / collègues, comptes inactifs) ; ajout et retrait ; suppression en cascade ; séries invitées | statuts, 400 / 403 / 404 |
+| E-mails | un e-mail par mention (seulement le mentionné, jamais l'auteur) ; `@tous` ; préférence respectée ; 1 par fil et 10 min ; panne SMTP sans effet ; invitation avec l'heure dans le fuseau de l'invité | `outbox` |
+| Résumé du matin | rien à dire → pas d'e-mail ; agenda, tâches du jour et en retard ; événements d'un autre jour et invitations refusées exclus ; série du jour ; commande (opt-in, `--dry-run`) | contenu du texte |
+| Jours ouvrés | conversions sur dix ans, bords d'année et années bissextiles ; successeur le lundi ; durée conservée à travers un week-end ; chaîne de trois ; chemin critique et fin prévue en jours ouvrés ; « rattraper » un samedi ; projet calendaire inchangé | dates exactes |
+| Tâches récurrentes | chaque règle ; pas de doublon à la réouverture ; durée, responsable, priorité copiés, pas les dépendances ; sans date ou une seule date ; jours ouvrés ; droits | tâche suivante |
+| Simulation de retard | tâche critique vs isolée ; tâche à marge qui devient critique ; terminées ignorées ; retard existant ; jours ouvrés ; validation `delay` ; droits ; boucle → 400 | classement |
+| Simulation — équivalence | Rust = Python sur 400 graphes aléatoires (dont des cycles) + graphe de 400 tâches | résultats identiques |
+| Charge d'équipe | pourcentage par membre et semaine, week-ends exclus, terminées/non datées/non assignées ignorées ; propositions (moins prioritaire, `todo`, jamais à un lecteur, jamais au-delà de 100 %) ; bornes de l'API | `percent`, `suggestions` |
+| Suivi du temps | chrono (minutes, plafond 12 h, minimum 1 min, un seul à la fois, jour local) ; saisie manuelle et validations ; suppression (propriétaire) ; total sans requête supplémentaire ; compte supprimé ; rapport | minutes exactes |
+| Modèles de projet | les 4 modèles produisent un projet cohérent (aucune tâche avant ses prérequis, jours ouvrés respectés) ; enregistrer puis réutiliser ; privés ; limite 20 ; modèle corrompu | 201 / 400 / 404 |
 | Fuseaux | profil créé à la première lecture (Europe/Paris) ; modification des deux fuseaux ; droits (`is_staff`) non modifiables | 200 |
 | Fuseaux | nom inconnu, chemin (`../etc/passwd`), `UTC+2`, vide → refusés | 400 |
 | Fuseaux | « 14 h » à Tokyo = 05 h UTC ; sans fuseau = celui du profil (New York, EDT) ; décalage explicite prioritaire | instants UTC exacts |
@@ -107,12 +130,15 @@ cd backend && python manage.py test
 18. Barre latérale : réduire/agrandir (« / »), pastilles sur Messages et sur les projets, administration et thème en pied ; `C` calendrier, `H` tableau de bord, `I` messages.
 
 ## Tests du front (`./test-front.sh`)
-145 vérifications sur un faux navigateur (JavaScriptCore) : accueil, synthèse, Gantt, équipe, calendrier et fuseaux, administration. Elles contrôlent le HTML produit (structure, calculs de géométrie, échappement des contenus utilisateur, droits affichés). Elles **ne remplacent pas** un test dans un vrai navigateur.
+198 vérifications sur un faux navigateur (JavaScriptCore) : accueil, synthèse, Gantt, équipe, calendrier et fuseaux, administration. Elles contrôlent le HTML produit (structure, calculs de géométrie, échappement des contenus utilisateur, droits affichés). Elles **ne remplacent pas** un test dans un vrai navigateur.
+
+## Tests de bout en bout (`./test-e2e.sh`)
+30 scénarios dans un **vrai navigateur** (Firefox headless piloté par Selenium) contre une API et un front temporaires : barre latérale (repli), vues de projet, calendrier (grille, création par clic et par balayage, **déplacement et redimensionnement à la souris** avec contrôle de la base, simple clic sans déplacement, série et suppression d'une occurrence, réponse à une invitation, changement de fuseau, navigation), messagerie (autocomplétion `@`, envoi, **notification entre deux navigateurs connectés à deux comptes**, `#tâche`, réaction / réponse / modification / suppression, pièce jointe chargée avec le jeton, recherche, bloc-notes), charge et simulation, chrono (compteur qui avance, survie à un rechargement), création de projet depuis un modèle, tâche récurrente, jours ouvrés, thème sombre, **création puis suppression d'un compte**, administration, erreur de connexion. Chaque test échoue si le bandeau d'erreur JavaScript apparaît. Ces tests ont déjà révélé de vrais défauts (onglet « Inscription » resté actif après déconnexion, Entrée qui choisissait la suggestion au lieu d'envoyer un nom déjà tapé en entier, plage créée par balayage trop courte).
 
 ## Journal des résultats
 | Date | Version | Tests auto | Remarques |
 |---|---|---|---|
-| 2026-10-12 | 0.4.0 | 158/158 OK avec chaque moteur ; 7/7 tests Rust (Django 5.2, Python 3.12, SQLite) | à rejouer sur PostgreSQL ; front vérifié par rendu simulé uniquement |
+| 2026-10-12 | 0.5.0 | 321/321 OK avec chaque moteur ; 8/8 tests Rust ; 198/198 front ; 30/30 E2E Firefox (Django 5.2, Python 3.12, SQLite) | à rejouer sur PostgreSQL ; Docker et CI non exécutés sur cette machine |
 
 ## À ajouter
-Couverture de code (`coverage`), tests bout en bout du front (Playwright), tests de charge.
+Couverture de code (`coverage`), tests de charge, tests E2E sur Chrome et Safari (seul Firefox est piloté), tests d'accessibilité automatisés.

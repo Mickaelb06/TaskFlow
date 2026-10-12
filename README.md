@@ -2,7 +2,7 @@
 
 Projet support de la VAE **Concepteur Développeur d'Applications** (RNCP niveau 6).
 
-Application web permettant de gérer des tâches seul ou en équipe : projets, membres et rôles, tâches (statut, priorité, échéance, assignation), commentaires.
+Application web de gestion de projet, seul ou en équipe : tâches et Gantt, calendrier à fuseaux horaires, messagerie interne avec mentions, suivi du temps, charge d'équipe et administration.
 
 ## Fonctionnalités
 **Administration** (comptes `is_staff`, entrée « Administration » du menu)
@@ -15,13 +15,17 @@ Application web permettant de gérer des tâches seul ou en équipe : projets, m
 
 **Calendrier** (entrée « Calendrier » du menu, façon Notion Calendar)
 - Vues **jour / semaine / mois** : grille horaire avec ligne « maintenant », événements à l'heure (blocs côte à côte quand ils se chevauchent), tâches de tous vos projets posées à la journée
+- **À la souris** : glisser un événement pour le déplacer (autre jour, autre heure), tirer son bord inférieur pour le redimensionner, balayer une zone vide pour en créer un (pas de 15 minutes)
+- **Événements récurrents** (tous les jours, du lundi au vendredi, chaque semaine, chaque mois, jusqu'à une date) : l'heure murale est conservée à travers le changement d'heure ; on peut supprimer une seule occurrence ou toute la série
+- **Invitations** : inviter des membres du projet (ou des collègues pour un événement personnel) ; l'invité est notifié, accepte ou refuse, l'événement refusé apparaît barré
 - **Fuseaux horaires** : un fuseau principal par utilisateur, un **second fuseau en colonne d'heures**, et chaque événement peut être saisi dans n'importe quel fuseau (« 11 h à Montréal » s'affiche à 17 h à Paris) ; stockage en UTC, heure d'été gérée
-- Événements **personnels** (vous seul) ou **de projet** (partagés avec les membres, lecture seule pour les lecteurs) ; filtre par projet et « mes tâches » ; clic dans la grille pour créer
+- Événements **personnels** (vous seul) ou **de projet** (partagés avec les membres, lecture seule pour les lecteurs) ; filtre par projet et « mes tâches »
 
 **Messagerie** (entrée « Messages » du menu, touche `I`)
-- Un **fil par projet** : en équipe, la discussion du projet ; si vous êtes seul(e) dans le projet, c'est votre **bloc-notes** personnel
-- **Messages directs** entre collègues (personnes qui partagent un projet)
-- **Mentions** : `@` ouvre la liste des participants (flèches + Entrée), `@tous` prévient toute l'équipe ; la personne reçoit une **notification** (cloche 🔔) et une pastille sur le fil et sur le projet
+- Un **fil par projet** : en équipe, la discussion du projet ; si vous êtes seul(e) dans le projet, c'est votre **bloc-notes** personnel. **Messages directs** entre collègues (personnes qui partagent un projet)
+- **Mentions** : `@` ouvre la liste des participants (flèches + Entrée), `@tous` prévient toute l'équipe ; notification (cloche) et pastille sur le fil et sur le projet
+- **Citer une tâche** avec `#` (numéro ou titre) : une pastille cliquable ouvre la tâche
+- **Répondre** à un message (citation), **modifier** ses messages, **réagir** avec un émoji, **joindre** jusqu'à 3 fichiers de 5 Mo (images, PDF, texte, CSV, documents Office — type vérifié sur le contenu), **rechercher** dans tous ses messages
 - Pastilles de non-lus, historique paginé, heures dans votre fuseau, suppression de ses messages (le propriétaire du projet peut modérer) ; lecteurs en lecture seule ; mise à jour automatique toutes les 15 s
 
 **Tableaux de bord**
@@ -35,6 +39,18 @@ Application web permettant de gérer des tâches seul ou en équipe : projets, m
 - **Indicateurs calculés** : avancement pondéré par la durée, fin prévue vs échéance, retards, charge par membre, risques détectés
 - **Vue Équipe** : pour chaque membre, ce sur quoi il travaille en ce moment, ce qui est en retard (et de combien de jours), ce qui arrive, sa charge, et un statut (en retard / surchargé / dans les temps / disponible) ; les tâches sans responsable sont signalées
 - **« Rattraper le retard »** : replanifie en un clic les tâches en retard et leurs successeurs
+- **Jours ouvrés** (réglage du projet) : durées et décalages ignorent les week-ends
+- **Tâches récurrentes** : quand on en termine une, la suivante est créée (même durée, même responsable)
+- **Charge de l'équipe** (onglet « Charge ») : qui est surchargé, semaine par semaine, avec propositions de réassignation en un clic
+- **Simulation « et si ? »** : « si cette tâche prenait 5 jours de plus, de combien la fin du projet reculerait-elle ? » pour toutes les tâches, calculée par le module Rust (×110 plus rapide que Python sur un gros projet)
+- **Suivi du temps** : chrono (un seul à la fois, visible dans la barre latérale) et saisie manuelle par tâche ; synthèse par membre
+- **Modèles de projet** : quatre modèles fournis (site web, événement, sprint, lancement) et vos propres modèles (« Enregistrer comme modèle ») ; création d'un projet complet, dates et dépendances comprises, en deux clics
+
+**Compte, notifications et sécurité**
+- **Mon compte** (clic sur votre nom) : export de toutes vos données (JSON), suppression de votre compte avec mot de passe (RGPD), préférences de notification
+- **E-mails** : à chaque mention ou invitation (au plus un par fil et par 10 minutes), et **résumé du matin** (`python manage.py send_digest`, à planifier) ; **notifications du navigateur** si vous les autorisez
+- **Limitation de débit** sur la connexion (10/min par adresse), l'inscription, l'envoi de messages et la suppression de compte
+- **Application installable** (PWA) : icône sur le bureau ou l'écran d'accueil, démarrage hors connexion (en production, en HTTPS)
 
 **Tâches et équipe**
 - Comptes (JWT), projets **solo** ou **en équipe** (propriétaire / membre / lecteur), invitations par nom ou email
@@ -49,7 +65,7 @@ Application web permettant de gérer des tâches seul ou en équipe : projets, m
 | API | Python 3.12 + Django 5.2 + Django REST Framework |
 | Base de données | PostgreSQL + migrations Django |
 | Authentification | JWT (djangorestframework-simplejwt) |
-| Tests | Django TestCase / DRF APITestCase |
+| Tests | Django TestCase / DRF APITestCase · faux navigateur (jsc) · Selenium + Firefox |
 | Moteur de calcul | **Rust** (PyO3, module `taskflow_planning`) avec repli automatique sur Python — voir [docs/conception/moteur-rust.md](docs/conception/moteur-rust.md) |
 | Déploiement | Docker Compose (db, api, web/nginx) + GitHub Actions |
 
@@ -80,9 +96,10 @@ python manage.py runserver                 # API : http://localhost:8000
 cd frontend && python3 serve.py 5173 # front : http://localhost:5173 (sans cache ; /admin ouvre l'administration)
 ```
 Module Rust (optionnel, recommandé) : `cd backend && pip install maturin && export PYO3_PYTHON="$PWD/.venv/bin/python" && maturin develop --release --uv -m planning_rs/Cargo.toml` (nécessite [Rust](https://rustup.rs)). Sans lui l'application fonctionne avec la version Python.
-Tests : `cd backend && python manage.py test` (158 tests, aucun appel réseau ; `TASKFLOW_PLANNING_BACKEND=python` pour tester le repli) ; `cd backend/planning_rs && cargo test --lib` (7 tests Rust) ; `python bench_planning.py` (mesures Rust/Python)
+Tests : `cd backend && python manage.py test` (321 tests, aucun appel réseau ; `TASKFLOW_PLANNING_BACKEND=python` pour tester le repli) ; `cd backend/planning_rs && cargo test --lib` (8 tests Rust) ; `python bench_planning.py` (mesures Rust/Python)
 Données de démo : `python manage.py seed_demo` (comptes `demo` (propriétaire des projets **et** administrateur : voit toutes les vues), `lea`, `sam` — mot de passe `demo-taskflow-2026` ; compte `admin` / `admin-taskflow-2026` = administrateur seul, sans projet : n'affiche que l'administration — **à changer en production**)
-Front : `./test-front.sh` (145 vérifications sur un faux navigateur, macOS). Premier administrateur en production : `python manage.py createsuperuser`.
+Tests de bout en bout dans un **vrai navigateur** : `./test-e2e.sh` (30 scénarios Firefox + Selenium : calendrier, glisser-déposer, messagerie à deux comptes, chrono, modèles… ; `pip install selenium`). Résumé du matin : `python manage.py send_digest [--dry-run]`.
+Front : `./test-front.sh` (198 vérifications sur un faux navigateur, macOS). Premier administrateur en production : `python manage.py createsuperuser`.
 Lancement local : `./start.sh` (démarre API + front, ouvre le navigateur) ; `./start.sh stop`.
 
 ## Documentation

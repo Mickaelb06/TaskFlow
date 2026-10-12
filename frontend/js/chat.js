@@ -2,6 +2,7 @@
    Tout texte venant d'un utilisateur passe par esc() avant d'entrer dans le HTML. */
 import * as TZ from "./tz.js";
 import { icon } from "./icons.js";
+import { art } from "./art.js";
 import { hue } from "./palette.js";
 
 const MENTION = /(?<![\w@])@(\w+(?:[.\-+]\w+)*)/g; // même règle que chat/services.py
@@ -180,7 +181,7 @@ export function chatHtml({ convs, current, messages, hasMore, draft, meName, tz,
   const conv = convs.find((c) => c.id === current);
   const right = conv
     ? `${threadHeaderHtml(conv, esc)}<div id="chat-msgs" class="chat-msgs">${messagesHtml({ messages, conv, meName, tz, now, hasMore, esc, editing, reactFor, canWrite: conv.can_write })}</div>${composerHtml(conv, draft, esc, { replyTo, files })}`
-    : '<div class="empty small-empty"><h2>Vos messages</h2><p class="muted">Choisissez une conversation, ou écrivez à un collègue.</p></div>';
+    : '<div class="empty small-empty">${art("messages")}<h2>Vos messages</h2><p class="muted">Choisissez une conversation, ou écrivez à un collègue.</p></div>';
   const list = search ? searchHtml(search.rows, search.q, esc) : convListHtml({ convs, current, tz, now, esc });
   return `<div class="chat"><aside class="chat-list"><div class="chat-search">${icon("search", 15)}<input id="chat-search" type="search" placeholder="Rechercher dans les messages" value="${esc(search ? search.q : "")}" aria-label="Rechercher dans les messages"></div>
     <div id="chat-convs">${list}</div></aside><section class="chat-thread">${right}</section></div>`;
@@ -208,7 +209,7 @@ function inviteRow(n, tz, now, esc) {
 }
 
 export function notificationsHtml({ rows, tz, now = new Date(), esc }) {
-  if (!rows.length) return '<div class="empty small-empty"><h2>Aucune notification</h2><p class="muted">Vous serez prévenu ici quand quelqu\'un vous mentionne avec @ ou vous invite à un événement.</p></div>';
+  if (!rows.length) return '<div class="empty small-empty">${art("notifications")}<h2>Aucune notification</h2><p class="muted">Vous serez prévenu ici quand quelqu\'un vous mentionne avec @ ou vous invite à un événement.</p></div>';
   return `<div class="notifs">${rows.map((n) => n.type === "invite" ? inviteRow(n, tz, now, esc) : `<button class="notif ${n.read ? "" : "unread"}" data-action="open-notif" data-id="${n.id}" data-conv="${n.conversation}">
     ${avatar(n.author || "?", "sm")}<span class="notif-main"><span><b>${esc(n.author || "Utilisateur supprimé")}</b> ${n.everyone ? "a prévenu tout le monde" : "vous a mentionné"} dans <b>${esc(n.conversation_title)}</b></span>
     <small>${esc(n.excerpt)}</small></span><time>${esc(whenLabel(n.created_at, tz, now))}</time>${n.read ? "" : '<i class="udot" aria-label="Non lue"></i>'}</button>`).join("")}</div>`;

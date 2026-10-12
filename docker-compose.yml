@@ -12,6 +12,8 @@ services:
     env_file: .env
     environment:
       POSTGRES_HOST: db
+      MEDIA_ROOT: /data/media
+    volumes: [media:/data/media]  # pièces jointes de la messagerie
     depends_on: [db]
     ports: ["8000:8000"]
   web:
@@ -20,3 +22,4 @@ services:
     ports: ["8080:80"]
 volumes:
   pgdata:
+  media:

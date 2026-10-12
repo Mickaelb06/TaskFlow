@@ -61,6 +61,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     # Limites de débit par portée (`throttle_scope` sur la vue). Derrière un proxy, régler NUM_PROXIES.
     "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.ScopedRateThrottle"],
+    "NUM_PROXIES": int(os.environ["NUM_PROXIES"]) if os.environ.get("NUM_PROXIES") else None,  # nombre de proxys devant l'API
     "DEFAULT_THROTTLE_RATES": {
         "login": os.environ.get("LOGIN_RATE", "10/min"),        # essais de connexion par adresse IP (force brute)
         "register": os.environ.get("REGISTER_RATE", "10/hour"),  # créations de compte par adresse IP

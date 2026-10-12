@@ -9,6 +9,7 @@ import * as CAL from "./calendar.js";
 import * as TZ from "./tz.js";
 import * as CH from "./chat.js";
 import { icon } from "./icons.js";
+import { art } from "./art.js";
 import { hue } from "./palette.js";
 
 const $ = (s) => document.querySelector(s);
@@ -266,7 +267,7 @@ function renderToolbar() {
 function renderView() {
   const v = $("#view");
   if (!state.project) {
-    v.innerHTML = `<div class="empty"><h2>Bienvenue sur TaskFlow</h2>
+    v.innerHTML = `<div class="empty">${art("projects")}<h2>Bienvenue sur TaskFlow</h2>
       <p class="muted">Créez un projet pour commencer — seul ou en équipe.</p>
       <button class="btn primary" data-action="new-project">Créer un projet</button></div>`;
     return;
@@ -377,7 +378,7 @@ function listView() {
     ${groups.filter(([, ts]) => ts.length).map(([label, ts, key]) => `<section class="group">
       <div class="group-head ${key === "late" ? "late-text" : ""}"><b>${label}</b><span class="count">${ts.length}</span></div>
       ${ts.map(taskRow).join("")}</section>`).join("")
-      || `<div class="empty small-empty"><p class="muted">${state.tasks.length ? "Aucune tâche ne correspond aux filtres." : "Aucune tâche pour l'instant."}</p></div>`}
+      || `<div class="empty small-empty">${art("tasks")}<p class="muted">${state.tasks.length ? "Aucune tâche ne correspond aux filtres." : "Aucune tâche pour l'instant — ajoutez-en une ci-dessus."}</p></div>`}
   </div>`;
 }
 
@@ -1797,3 +1798,8 @@ auth.onLogout(showAuth);
     await startApp();
   } catch { showAuth(); }
 })();
+
+/* Application installable (PWA) : service worker hors localhost uniquement, pour ne jamais servir de code périmé en développement */
+if ("serviceWorker" in navigator && !["localhost", "127.0.0.1", "[::1]"].includes(location.hostname)) {
+  navigator.serviceWorker.register("/sw.js").catch(() => {});
+}

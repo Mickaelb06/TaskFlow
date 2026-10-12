@@ -33,7 +33,8 @@ def main(sizes):
     for n in sizes:
         nodes = graph(n)
         repeat = 5 if n <= 5000 else 3
-        for name, args in [("critical_path", (nodes,)), ("forecast_end", (nodes, 100)), ("cascade_shifts", (nodes, 1))]:
+        for name, args in [("critical_path", (nodes,)), ("forecast_end", (nodes, 100)), ("cascade_shifts", (nodes, 1))] + (
+                [("delay_impacts", (nodes, 100, 5))] if n <= 2000 else []):  # une passe par tâche : O(n²), seulement pour les petits projets
             tp = best(lambda: getattr(py, name)(*args), repeat)
             tr = best(lambda: getattr(rust, name)(*args), repeat)
             assert getattr(py, name)(*args) == getattr(rust, name)(*args), "résultats différents !"

@@ -10,7 +10,7 @@ Projet support d'une VAE « Concepteur Développeur d'Applications » (RNCP nive
 
 ## Architecture backend (ne pas la contourner)
 `urls → views (ViewSet) → services.py (règles métier + droits) → models (ORM)`. Serializers = validation.
-- Apps : `accounts`, `projects` (Project, Membership), `tasks` (Task, Comment), `agenda` (Event), `chat` (Conversation, Message, Notification, ReadMark).
+- Apps : `accounts`, `projects` (Project, Membership), `tasks` (Task, Comment), `agenda` (Event), `chat` (Conversation, Message, Notification, ReadMark, Reaction, Attachment). Transverses : `accounts/emails.py` (e-mails), `accounts/account_services.py` (export/suppression de son compte), `taskflow/throttles.py` (limites de débit).
 - **Moteur de calcul en deux implémentations** : `backend/planning_rs/` (Rust + PyO3, module `taskflow_planning`) et `tasks/planning_py.py` (Python de référence, aussi le repli). `tasks/planning_engine.py` choisit (`TASKFLOW_PLANNING_BACKEND` = auto/rust/python). **Tout changement d'algorithme se fait dans LES DEUX fichiers** (`engine.rs` et `planning_py.py`) + un cas dans `tasks/test_engine.py` (comparaison sur graphes aléatoires). Les nœuds sont des tuples `(id, terminée, début, fin, prérequis)`, dates en ordinaux ; le moteur ne touche jamais à la base.
 - `tasks/planning.py` = moteur déterministe (cascade des dépendances, CPM, prévision de fin, risques, replan). **Aucune logique de date dans les vues** : tout passe par ce module.
 - `agenda/` = calendrier : `Event` (UTC, `project` vide = personnel), `services.py` (droits, fuseaux, `calendar()`), `GET /api/calendar/` (événements + tâches d'une période). Fuseau de l'utilisateur = `accounts.Profile.timezone` (+ `secondary_timezone`), validé par `accounts/timezones.py::zone` (jamais de nom IANA non vérifié).
@@ -40,8 +40,10 @@ docker compose up --build                  # tout, sur :8080
 - `Comment.author` est nullable (`SET_NULL`) : un compte supprimé laisse ses commentaires, affichés « Utilisateur supprimé ».
 
 ## Tests
-- Backend : `cd backend && python manage.py test` (aucun appel réseau).
-- Front : `./test-front.sh` — `frontend/tests/stub.js` simule le DOM et l'API ; **ce n'est pas un test E2E** (aucun vrai navigateur : le rendu visuel, le glisser-déposer et les modales ne sont pas vérifiés). Ajouter une vérification à `smoke.test.js` pour chaque nouvelle vue.
+- Backend : `cd backend && python manage.py test` (321 tests, ~15 s : hachage MD5 en test seulement ; aucun appel réseau). Les limites de débit utilisent le cache : **`cache.clear()` dans `setUp`** des tests qui envoient beaucoup de requêtes. Les e-mails partent à `transaction.on_commit` : tests avec `self.captureOnCommitCallbacks(execute=True)` ; `django.core.mail.outbox`.
+- E2E : `./test-e2e.sh` (Selenium + Firefox, vrai navigateur, 30 scénarios ; démarre sa propre API sur :8010 et son front sur :5180, base temporaire). Les tests réagissent à des repeints du DOM : utiliser les aides qui réessaient (`open_conv`, `has_text`) contre les `StaleElementReferenceException`.
+- Front : `./test-front.sh` (198 vérifications) — `frontend/tests/stub.js` simule le DOM et l'API ; **ce n'est pas un test E2E** : le rendu visuel, les gestes à la souris et les modales ne sont vérifiés que par `./test-e2e.sh`. Ajouter une vérification à `smoke.test.js` pour chaque nouvelle vue **et** un scénario E2E pour chaque nouveau geste.
+- Captures d'écran pour juger le rendu : Firefox headless sur une copie du front (`firefox --headless --no-remote --profile <dossier neuf> --screenshot …`) ; **profil neuf à chaque fois** sinon le cache sert d'anciens fichiers.
 
 ## Tableaux de bord
 - Graphiques en SVG écrits à la main (`frontend/js/charts.js`), sans bibliothèque : donut, anneau, courbes, histogramme. Couleurs uniquement via les classes CSS de la palette.
@@ -53,18 +55,35 @@ Palette **crème et brun** (clair) / **espresso** (sombre), définie uniquement 
 
 ## Messagerie — règles
 - `chat/` : un fil `Conversation` par projet (créé à la demande, `solo` = un seul membre → bloc-notes) + conversations directes (`user_a.pk < user_b.pk`, unique). Droits dans `chat/services.py` (`can_read` / `can_write`), jamais dans les vues ; un non-participant reçoit **404**, un lecteur de projet **403** en écriture.
-- Les mentions sont calculées **côté serveur** (`parse_mentions`) avec le même motif regex que `frontend/js/chat.js` (garder les deux identiques) ; seuls les participants sont notifiables, jamais l'auteur ; `@tous`/`@all` seulement dans un fil de projet de 3 personnes ou plus.
+- Les mentions sont calculées **côté serveur** (`parse_mentions`) avec le même motif regex que `frontend/js/chat.js` (garder les deux identiques) ; seuls les participants sont notifiables, jamais l'auteur ; `@tous`/`@all` seulement dans un fil de projet de 3 personnes ou plus. Modifier un message ne renotifie que les **nouvelles** mentions.
 - Le contenu est stocké **brut** ; le front l'échappe avec `esc()` puis ajoute les `<span class="mention">` (jamais l'inverse).
-- Messages directs : exigent un projet en commun (sinon on pourrait sonder les comptes).
-- Temps réel = **relève toutes les 15 s** (`pollChat` dans `app.js`), pas de WebSocket : volontaire (simple, défendable) ; ne pas descendre sous 10 s.
-- Pas de limitation de débit sur l'envoi, pas d'édition de message, pas de pièces jointes : à faire si besoin.
+- `#12` cite une tâche **du projet du fil seulement** (jamais d'un autre projet : fuite de titres) ; pas dans les conversations directes.
+- **Pièces jointes** : type imposé par l'extension **et** vérifié sur le contenu (octets magiques), jamais le type du navigateur ; pas de SVG/HTML/exécutables ; nom stocké = uuid ; servies par `/chat/attachments/<id>/` avec le jeton (`nosniff`, CSP `sandbox`) ; le fichier est supprimé avec le message (signal `post_delete`). Stockage `MEDIA_ROOT` (volume Docker `media`).
+- Messages directs : exigent un projet en commun ; l'API répond **404 identique** pour « inconnu » et « sans projet en commun » (on ne devine pas quels comptes existent).
+- Temps réel = **relève toutes les 15 s** (`pollChat` dans `app.js`), pas de WebSocket : volontaire (simple, défendable) ; ne pas descendre sous 10 s. Limite de débit `chat` (60/min) sur les écritures seulement (`WritesOnlyThrottle`), jamais sur la relève.
+- Réponse (`reply_to`), réactions (6 émojis autorisés, `REACTIONS` dans `services.py` **et** `chat.js`), recherche (`/chat/search/`, `?around=` pour ouvrir un résultat).
 
 ## Calendrier et fuseaux horaires — règles
 - **Stockage en UTC, affichage dans le fuseau de l'utilisateur.** Une date-heure *sans* décalage envoyée à l'API est l'heure murale du fuseau `timezone` de la requête (sinon celui du profil) ; avec décalage, elle est prise telle quelle (`agenda/serializers.py::to_internal_value`). Ne jamais convertir à la main dans une vue.
 - `GET /api/calendar/?from&to` raisonne en **jours du fuseau du profil** (`services.day_bounds`) : un événement à 23 h 30 à Paris est le lendemain à Tokyo. Les tâches, elles, n'ont que des dates (sans heure ni fuseau).
 - Front : `js/tz.js` (Intl uniquement, pas de bibliothèque) et `js/calendar.js` (rendu pur, testé dans `tests/calendar.test.js`). Le calendrier s'affiche toujours dans `state.user.timezone` ; le second fuseau n'ajoute qu'une colonne d'heures.
 - Tout test de date-heure doit couvrir un changement d'heure (25 oct. 2026 à Paris) et un fuseau sans heure d'été (Tokyo).
-- Pas de glisser-déposer ni de redimensionnement des événements (clic → modale) : à ajouter si besoin, mais non vérifiable sans vrai navigateur ici.
+- **Glisser-déposer / redimensionnement / création à la souris** : événements `pointer*` dans `app.js` (`cdrag`), pas de 15 min ; on envoie une heure *murale* (`tz.shiftLocal`) + `timezone`, jamais d'instant calculé côté navigateur. Un simple clic ne déplace rien (seuil de 5 px) et `suppressClick` évite d'ouvrir la fenêtre après un glissement.
+- **Récurrence** (`agenda/services.occurrences`) : la même heure *murale* du fuseau de l'événement (donc suit l'heure d'été), horizon 3 ans, le 31 saute les mois courts. Modifier une occurrence modifie la **série** (les occurrences portent `series_starts_at`) ; « supprimer cette occurrence » = `EventSkip`.
+- **Invitations** (`Invitation`) : un invité voit l'événement sans pouvoir le modifier ; compte comme notification (`summary`, `/notifications/` fusionne mentions et invitations, `type: mention|invite`).
+
+## Gestion de projet — règles
+- **Jours ouvrés** : `Project.skip_weekends` ; `tasks/workdays.py` convertit dates ↔ numéros de jour ouvré **autour** du moteur (`planning._nodes/_unit`). Ne jamais ajouter de logique « week-end » dans `engine.rs`/`planning_py.py`.
+- **Tâches récurrentes** (`services._spawn_next`) : créées à la **première** fin de la tâche (garde `recurrence_of`), même durée, sans dépendances ; mensuel = même quantième ramené en fin de mois.
+- **Simulation** `delay_impacts` (Rust **et** Python, comparés par `test_engine.py`) ; `planning.delay_simulation` / `planning.workload` = adaptateurs. Rééquilibrage : propose seulement des tâches `todo`, jamais à un lecteur, jamais au-delà de 100 %.
+- **Temps** (`time_services.py`) : un seul chrono par utilisateur (en démarrer un arrête l'autre), plafonné à 12 h, minimum 1 min ; le total de la liste des tâches est annoté (une requête) ; compte supprimé → saisies conservées, signées « Utilisateur supprimé ».
+- **Modèles** (`projects/templates.py`) : décalages en jours (ouvrés si le modèle l'est) ; chaque modèle fourni est vérifié par un test (aucune tâche ne commence avant la fin de ses prérequis) — en ajouter un = laisser ce test le valider.
+
+## Compte et sécurité — règles
+- Limites de débit par `throttle_scope` (réglables par variables d'environnement) ; `login` limite par IP (et compte aussi les bons mots de passe une fois la limite atteinte). Derrière un proxy, régler `NUM_PROXIES`.
+- Suppression de son compte : mot de passe exigé, refusée si dernier admin ou propriétaire d'un projet partagé (→ `POST /projects/{id}/transfer/`) ; projets solo supprimés ; messages/commentaires/temps conservés, signés « Utilisateur supprimé » ; ligne d'audit `user.self_delete`.
+- E-mails : jamais bloquants (`fail_silently=False` mais exception journalisée), texte brut, 1 e-mail de mention par fil et par 10 min, préférence `Profile.notify_email` ; résumé : `send_digest`.
+- PWA : `sw.js` « réseau d'abord », n'enregistre rien de `/api/`, **enregistré seulement hors localhost** (sinon risque de code périmé en développement).
 
 ## Conventions
 - Langue : **français** (UI, commentaires, docs, messages d'erreur). Code identifiants en anglais.
@@ -78,7 +97,7 @@ Palette **crème et brun** (clair) / **espresso** (sombre), définie uniquement 
 - Compiler : `cd backend && export PYO3_PYTHON="$PWD/.venv/bin/python" VIRTUAL_ENV="$PWD/.venv" && maturin develop --release --uv -m planning_rs/Cargo.toml`. **Après toute modification de `engine.rs` il faut recompiler** sinon Django continue d'utiliser l'ancien binaire.
 - `PYO3_PYTHON` est indispensable : sans lui `cargo` prend le Python système (3.9) et échoue (`abi3-py310`). `--uv` est indispensable avec un venv créé par `uv` (pas de pip dedans).
 - Tests Rust : `cd backend/planning_rs && cargo test --lib`. La logique pure est dans `engine.rs`, `lib.rs` ne fait que convertir les types (aucune logique métier dedans).
-- Ne pas affirmer que Rust « accélère » l'application : les mesures (`docs/conception/moteur-rust.md`) montrent ×2 à ×5 sur le calcul, dominé par la copie des données ; imperceptible sur un projet réaliste. Mettre à jour ces mesures si le moteur change.
+- Ne pas affirmer que Rust « accélère » l'application : les mesures (`docs/conception/moteur-rust.md`) montrent ×2 à ×5 sur les calculs simples (dominés par la copie des données) et ×110 sur la simulation de retard (O(n²)) — imperceptible sur un projet réaliste de 50 tâches, utile au-delà de quelques centaines. Mettre à jour ces mesures si le moteur change.
 - Docker : `backend/Dockerfile` compile le module en deux étapes (non testé ici : Docker n'est pas installé sur cette machine).
 
 ## Pièges connus
@@ -91,4 +110,4 @@ Palette **crème et brun** (clair) / **espresso** (sombre), définie uniquement 
 - Le CORS est ouvert uniquement si `DJANGO_DEBUG=1`.
 
 ## À faire
-Limitation de débit sur la connexion et sur l'envoi de messages, suppression de compte (RGPD), jours ouvrés (le moteur compte en jours calendaires), tests de bout en bout dans un vrai navigateur, suppression de son propre compte par l'utilisateur (RGPD ; seul un admin peut supprimer aujourd'hui), invalidation des jetons JWT après changement de mot de passe, mise en production (HTTPS, sauvegardes).
+jours fériés, invalidation des jetons JWT après changement de mot de passe, limitation de débit par compte (pas seulement par IP), WebSocket si la relève de 15 s ne suffit plus, vérification de Docker/CI/PostgreSQL (jamais exécutés sur cette machine), mise en production (HTTPS, sauvegardes).

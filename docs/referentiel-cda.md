@@ -20,6 +20,13 @@ Intitulés simplifiés : à vérifier mot pour mot avec le référentiel officie
 | 2 | Gérer la complexité temporelle (fuseaux, heure d'été) | `agenda/services.py`, `frontend/js/tz.js` : stockage UTC, conversion d'heures murales, jours vus depuis le fuseau de l'utilisateur, tests des changements d'heure |
 | 2 | Concevoir une messagerie temps quasi réel (sans WebSocket) | `chat/` : fils projet/direct, non-lus, relève toutes les 15 s, pagination par curseur |
 | 2 | Gérer droits et notifications sur des données partagées | `chat/services.py` : mentions limitées aux participants, 404 plutôt que 403, tests `chat/tests.py` |
+| 1 | Tests de bout en bout dans un navigateur réel | `e2e/test_e2e.py` (Selenium + Firefox) : glisser-déposer, messagerie à deux comptes, chrono, modèles ; job CI dédié |
+| 2 | Calcul haute performance et validation d'équivalence | `delay_impacts` (Rust, ×110) comparé à la version Python sur ~1 600 graphes aléatoires |
+| 2 | Sécuriser des téléversements | `chat/services._check_file` : liste blanche, vérification des octets, nom aléatoire, téléchargement authentifié |
+| 2 | Conformité RGPD (accès, portabilité, effacement) | `accounts/account_services.py`, export JSON, suppression avec garde-fous, trace d'audit |
+| 2 | Limitation de débit et protection contre la force brute | `taskflow/throttles.py`, tests de dépassement |
+| 2 | Notifications multi-canaux | `accounts/emails.py` (e-mails, résumé planifié), notifications du navigateur, cloche in-app |
+| 1 | Application installable (PWA) | `frontend/sw.js`, manifeste, icônes |
 | 1 | Concevoir une interface de calendrier | `frontend/js/calendar.js` : grille horaire jour/semaine, mois, chevauchements, deux fuseaux côte à côte |
 | 1 | Concevoir une interface orientée suivi d'équipe | vue Équipe (`frontend/js/team.js`), indicateurs de retard par membre |
 | 1 | Concevoir des visualisations de données | `frontend/js/charts.js`, `dashboard.js` : graphiques SVG sans bibliothèque |

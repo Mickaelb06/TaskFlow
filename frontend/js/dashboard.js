@@ -1,4 +1,5 @@
 import { icon } from "./icons.js";
+import { art } from "./art.js";
 // Tableaux de bord : personnel (tous mes projets) et projet (équipe). Fonctions pures qui renvoient du HTML.
 import * as D from "./dates.js";
 import { barChart, donut, lineChart, ring } from "./charts.js";
@@ -59,7 +60,7 @@ export function homeHtml({ data, user, esc, avatar }) {
         <div class="pc-line"><span class="badge ${cls}">${label}</span>
           ${p.my_open ? `<span class="muted small">${plural(p.my_open, "tâche pour moi", "tâches pour moi")}</span>` : ""}
           ${p.team_late ? `<span class="late-text small">${plural(p.team_late, "collègue en retard", "collègues en retard")}</span>` : ""}</div></div></button>`;
-  }).join("") || '<div class="empty small-empty"><p class="muted">Aucun projet pour l\'instant.</p><button class="btn primary" data-action="new-project">Créer un projet</button></div>';
+  }).join("") || '<div class="empty small-empty">${art("projects")}<p class="muted">Aucun projet pour l\'instant.</p><button class="btn primary" data-action="new-project">Créer un projet</button></div>';
 
   return `<div class="dash">
     <div class="dash-hello"><div><h2>Bonjour ${esc(user.username)}</h2>
