@@ -682,7 +682,8 @@ async function showPick() {
   let items = [], start = 0, prefix = "@";
   if (at) { items = CH.suggestions(conv, at.query, state.user.username); start = at.start; }
   else if (hash) { items = CH.taskSuggestions(await projectTasks(conv), hash.query); start = hash.start; prefix = "#"; }
-  if (!items.length) return hidePick();
+  const typed = (at || hash)?.query.toLowerCase();
+  if (!items.length || (items.length === 1 && items[0].name.toLowerCase() === typed)) return hidePick(); // nom déjà tapé en entier : Entrée envoie
   const active = Math.min(state.chat.pick.active, items.length - 1);
   state.chat.pick = { items, active, start, prefix };
   pop.innerHTML = CH.popupHtml(items, active, esc);
@@ -768,7 +769,7 @@ document.addEventListener("keydown", guard(async (e) => {
 async function pollChat() {
   if (!state.user || document.hidden || $("#app")?.hidden) return;
   const grew = await refreshChat();
-  if (grew) toast("Vous avez été mentionné — voir les notifications (🔔).");
+  if (grew) toast("Vous avez une nouvelle notification (cloche en haut de la barre latérale).");
   const c = state.chat;
   if (state.page === "messages" && c.current) {
     const last = c.messages.length ? c.messages[c.messages.length - 1].id : 0;
@@ -1399,7 +1400,8 @@ document.addEventListener("pointermove", (e) => {
   if (!d.moved && Math.abs(e.clientY - d.y0) < 5 && Math.abs(e.clientX - (d.x0 ?? e.clientX)) < 5) return;
   d.moved = true;
   if (d.kind === "create") {
-    const m = Math.max(0, Math.min(1440, Math.round((((e.clientY - d.top) / CAL.HOUR_PX) * 60) / SNAP) * SNAP));
+    const raw = ((e.clientY - d.top) / CAL.HOUR_PX) * 60;
+    const m = Math.max(0, Math.min(1440, (raw >= d.a ? Math.ceil(raw / SNAP) : Math.floor(raw / SNAP)) * SNAP)); // le créneau englobe toujours la zone balayée
     d.b = m;
     let ghost = d.col.querySelector(".cghost");
     if (!ghost) { ghost = document.createElement("div"); ghost.className = "cghost"; d.col.appendChild(ghost); }
@@ -1543,6 +1545,7 @@ Object.assign(handlers, admin.handlers);
 function showAuth() {
   $("#app").hidden = true;
   $("#auth").hidden = false;
+  document.querySelector('[data-auth-tab="login"]')?.click?.(); // jamais sur l'onglet Inscription après une déconnexion
 }
 async function startApp() {
   $("#auth").hidden = true;
