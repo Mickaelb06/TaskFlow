@@ -93,3 +93,11 @@ export function hourLabel(minutes) {
   const r = m % 60;
   return r ? `${h}:${pad(r)}` : `${h} h`;
 }
+
+/** Heure murale de `instant` dans `tz` décalée de `days` jours et `minutes` minutes, au format « AAAA-MM-JJTHH:MM »
+ *  (sans décalage : l'API la lit comme heure murale du fuseau envoyé avec). Sert au glisser-déposer des événements. */
+export function shiftLocal(instant, tz, days = 0, minutes = 0) {
+  const p = parts(instant, tz);
+  const d = new Date(Date.UTC(p.y, p.m - 1, p.d + days, p.h, p.mi + minutes));
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+}

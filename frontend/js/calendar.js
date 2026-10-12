@@ -4,6 +4,7 @@
 import * as D from "./dates.js";
 import * as TZ from "./tz.js";
 import { hue } from "./palette.js";
+import { icon } from "./icons.js";
 
 export const HOUR_PX = 48;
 const MIN_EVENT_PX = 18;
@@ -43,8 +44,8 @@ export function segmentOn(ev, key, tz) {
   if (key < sk || key > ek) return null;
   const start = key === sk ? TZ.minutesOfDay(s, tz) : 0;
   const end = key === ek ? TZ.minutesOfDay(e, tz) : 1440;
-  if (end <= start) return key === ek && key !== sk ? null : { start, end: Math.min(1440, start + 15) };
-  return { start, end };
+  if (end <= start) return key === ek && key !== sk ? null : { start, end: Math.min(1440, start + 15), endsHere: key === ek };
+  return { start, end, endsHere: key === ek };
 }
 
 const col = (name) => `--c: hsl(${hue(name)} 62% 44%)`;
@@ -64,15 +65,27 @@ function tasksOn(tasks, key) {
   return tasks.filter((t) => (t.due_date || t.start_date) === key);
 }
 
+/** Classes d'état d'un événement : invitation en attente (bord pointillé), refusée (barrée), série, lecture seule. */
+function stateClasses(ev) {
+  return [ev.can_edit ? "" : "ro", ev.my_status === "invited" ? "pending" : "", ev.my_status === "declined" ? "declined" : "", ev.recurrence ? "series" : ""].join(" ");
+}
+
+function badges(ev) {
+  return `${ev.recurrence ? icon("repeat", 11) : ""}${ev.invitees?.length ? icon("users", 11) : ""}`;
+}
+
 function eventBlock(ev, seg, lay, tz, esc) {
   const top = (seg.start / 60) * HOUR_PX;
   const height = Math.max(MIN_EVENT_PX, ((seg.end - seg.start) / 60) * HOUR_PX - 2);
   const w = 100 / lay.cols;
   const short = height < 34;
-  return `<button class="cevent ${ev.can_edit ? "" : "ro"}" data-action="edit-event" data-id="${ev.id}"
+  const range = `${TZ.hhmm(new Date(ev.starts_at), tz)} – ${TZ.hhmm(new Date(ev.ends_at), tz)}`;
+  return `<div class="cevent ${stateClasses(ev)}" role="button" tabindex="0" data-action="edit-event" data-id="${ev.id}" data-occ="${ev.occurrence_day || ""}"
+    data-seg-start="${seg.start}" data-seg-end="${seg.end}"
     style="${eventStyle(ev)};top:${top}px;height:${height}px;left:calc(${lay.col * w}% + 1px);width:calc(${w}% - 3px)"
-    title="${esc(ev.title)} — ${TZ.hhmm(new Date(ev.starts_at), tz)}–${TZ.hhmm(new Date(ev.ends_at), tz)}${ev.project_name ? " · " + esc(ev.project_name) : ""}">
-    <b>${esc(ev.title)}</b>${short ? "" : `<span>${TZ.hhmm(new Date(ev.starts_at), tz)} – ${TZ.hhmm(new Date(ev.ends_at), tz)}</span>`}</button>`;
+    title="${esc(ev.title)} — ${range}${ev.project_name ? " · " + esc(ev.project_name) : ""}">
+    <b>${esc(ev.title)}<span class="ebadges">${badges(ev)}</span></b>${short ? "" : `<span>${range}</span>`}
+    ${ev.can_edit && seg.endsHere ? '<i class="cevent-resize" data-resize aria-hidden="true"></i>' : ""}</div>`;
 }
 
 /** Gouttière d'heures : étiquettes de `tz` face aux lignes du fuseau principal (`shiftMin` = écart). */
@@ -125,8 +138,8 @@ function monthGrid({ cursor, data, tz, now, esc }) {
     const more = evs.length + tasks.length - shownE.length - shownT.length;
     return `<div class="mcell ${d.getMonth() !== m ? "out" : ""}" data-action="cal-slot" data-date="${k}" data-month="1">
       <button class="mnum ${k === todayKey ? "today" : ""}" data-action="cal-day" data-date="${k}">${d.getDate() === 1 ? D.fmt(d, { day: "numeric", month: "short" }) : d.getDate()}</button>
-      ${shownE.map(({ ev }) => `<button class="mevent" style="${eventStyle(ev)}" data-action="edit-event" data-id="${ev.id}">
-        <i></i><em>${TZ.hhmm(new Date(ev.starts_at), tz)}</em><span>${esc(ev.title)}</span></button>`).join("")}
+      ${shownE.map(({ ev }) => `<button class="mevent ${stateClasses(ev)}" style="${eventStyle(ev)}" data-action="edit-event" data-id="${ev.id}" data-occ="${ev.occurrence_day || ""}">
+        <i></i><em>${TZ.hhmm(new Date(ev.starts_at), tz)}</em><span>${esc(ev.title)}</span><span class="ebadges">${badges(ev)}</span></button>`).join("")}
       ${shownT.map((t) => taskChip(t, esc)).join("")}
       ${more > 0 ? `<button class="more" data-action="cal-day" data-date="${k}">+${more} autres</button>` : ""}</div>`;
   }).join("");

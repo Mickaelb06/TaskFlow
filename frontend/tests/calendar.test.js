@@ -20,6 +20,15 @@ ok("fuseau inconnu refusé, connu accepté", !TZ.isValid("Mars/Olympus") && TZ.i
 ok("liste des fuseaux non vide, contient Paris", TZ.allZones().includes("Europe/Paris") && TZ.allZones().length > 15);
 ok("étiquettes d'heures : 7:30, 8 h, minuit −1 h = 23 h, décalage Inde", TZ.hourLabel(450) === "7:30" && TZ.hourLabel(480) === "8 h" && TZ.hourLabel(-60) === "23 h" && TZ.hourLabel(60 + 270) === "5:30");
 
+print("# Déplacement à la souris (shiftLocal)");
+const mon = utc(2026, 9, 12, 7, 0); // lundi 12 oct. 9 h à Paris (UTC+2)
+ok("décaler de 30 min", TZ.shiftLocal(mon, "Europe/Paris", 0, 30) === "2026-10-12T09:30");
+ok("décaler d'un jour et d'une heure en arrière", TZ.shiftLocal(mon, "Europe/Paris", 1, -60) === "2026-10-13T08:00");
+ok("passer minuit : 9 h − 10 h = 23 h la veille", TZ.shiftLocal(mon, "Europe/Paris", 0, -600) === "2026-10-11T23:00");
+ok("l'heure murale est celle du fuseau demandé", TZ.shiftLocal(mon, "Asia/Tokyo", 0, 0) === "2026-10-12T16:00");
+ok("changement d'heure : 9 h à Paris le 26 oct. (hiver) reste 9 h murales même si l'UTC change", TZ.shiftLocal(utc(2026, 9, 26, 8, 0), "Europe/Paris", 0, 0) === "2026-10-26T09:00");
+ok("changement de mois et d'année", TZ.shiftLocal(utc(2026, 11, 31, 22, 0), "Europe/Paris", 0, 0) === "2026-12-31T23:00" && TZ.shiftLocal(utc(2026, 11, 31, 22, 0), "Europe/Paris", 1, 0) === "2027-01-01T23:00");
+
 print("# Mise en page (calendar.js)");
 ok("deux événements qui se chevauchent : 2 colonnes", same(CAL.layoutColumns([{ start: 0, end: 60 }, { start: 30, end: 90 }]), [{ col: 0, cols: 2 }, { col: 1, cols: 2 }]));
 ok("événements qui se suivent : pleine largeur chacun", same(CAL.layoutColumns([{ start: 0, end: 60 }, { start: 60, end: 120 }]), [{ col: 0, cols: 1 }, { col: 0, cols: 1 }]));
@@ -28,9 +37,9 @@ ok("la colonne se libère et se réutilise", same(CAL.layoutColumns([{ start: 0,
 ok("liste vide", same(CAL.layoutColumns([]), []));
 const ev = (a, b) => ({ starts_at: a.toISOString(), ends_at: b.toISOString() });
 const night2 = ev(utc(2026, 9, 14, 20, 0), utc(2026, 9, 15, 0, 0)); // 22 h → 02 h à Paris (UTC+2)
-ok("événement de nuit : 22 h → minuit le premier jour, minuit → 2 h le suivant", same(CAL.segmentOn(night2, "2026-10-14", "Europe/Paris"), { start: 1320, end: 1440 }) && same(CAL.segmentOn(night2, "2026-10-15", "Europe/Paris"), { start: 0, end: 120 }) && CAL.segmentOn(night2, "2026-10-16", "Europe/Paris") === null && CAL.segmentOn(night2, "2026-10-13", "Europe/Paris") === null);
+ok("événement de nuit : 22 h → minuit le premier jour, minuit → 2 h le suivant", same(CAL.segmentOn(night2, "2026-10-14", "Europe/Paris"), { start: 1320, end: 1440, endsHere: false }) && same(CAL.segmentOn(night2, "2026-10-15", "Europe/Paris"), { start: 0, end: 120, endsHere: true }) && CAL.segmentOn(night2, "2026-10-16", "Europe/Paris") === null && CAL.segmentOn(night2, "2026-10-13", "Europe/Paris") === null);
 ok("fini pile à minuit : rien le lendemain", CAL.segmentOn(ev(utc(2026, 9, 14, 20, 0), utc(2026, 9, 14, 22, 0)), "2026-10-15", "Europe/Paris") === null);
-ok("même événement, autre fuseau, autre jour : 20 h UTC = 05 h le lendemain à Tokyo", same(CAL.segmentOn(ev(utc(2026, 9, 14, 20, 0), utc(2026, 9, 14, 21, 0)), "2026-10-15", "Asia/Tokyo"), { start: 300, end: 360 }));
+ok("même événement, autre fuseau, autre jour : 20 h UTC = 05 h le lendemain à Tokyo", same(CAL.segmentOn(ev(utc(2026, 9, 14, 20, 0), utc(2026, 9, 14, 21, 0)), "2026-10-15", "Asia/Tokyo"), { start: 300, end: 360, endsHere: true }));
 ok("clic : arrondi à la demi-heure et borné", CAL.minuteAt(0) === 0 && CAL.minuteAt(9 * 48 + 20) === 540 && CAL.minuteAt(9 * 48 + 30) === 540 + 30 && CAL.minuteAt(99999) === 1410 && CAL.minuteAt(-5) === 0);
 const cursor = new Date(2026, 9, 14); // mercredi
 const wk = CAL.range("week", cursor);

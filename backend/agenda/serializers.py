@@ -13,12 +13,36 @@ class EventSerializer(serializers.ModelSerializer):
     project_name = serializers.CharField(source="project.name", read_only=True, default=None)
     creator_name = serializers.CharField(source="creator.username", read_only=True, default=None)
     can_edit = serializers.SerializerMethodField()
+    attendees = serializers.ListField(child=serializers.IntegerField(), write_only=True, required=False)
+    invitees = serializers.SerializerMethodField()
+    my_status = serializers.SerializerMethodField()
+    series_starts_at = serializers.SerializerMethodField()
+    series_ends_at = serializers.SerializerMethodField()
+    occurrence_day = serializers.SerializerMethodField()
 
     class Meta:
         model = Event
         fields = ["id", "project", "project_name", "title", "description", "starts_at", "ends_at", "timezone",
-                  "creator", "creator_name", "can_edit"]
+                  "recurrence", "recurrence_until", "attendees", "invitees", "my_status", "series_starts_at", "series_ends_at",
+                  "occurrence_day", "creator", "creator_name", "can_edit"]
         read_only_fields = ["creator"]
+
+    def get_invitees(self, obj):
+        return [{"id": i.user_id, "username": i.user.username, "status": i.status} for i in obj.invitations.all()]
+
+    def get_my_status(self, obj):
+        return services.my_status(self.context["request"].user, obj)
+
+    # Pour une occurrence d'une série, ces champs donnent les horaires de la SÉRIE (modifier une occurrence modifie la série)
+    def get_series_starts_at(self, obj):
+        return serializers.DateTimeField().to_representation(getattr(obj, "series_starts_at", obj.starts_at))
+
+    def get_series_ends_at(self, obj):
+        return serializers.DateTimeField().to_representation(getattr(obj, "series_ends_at", obj.ends_at))
+
+    def get_occurrence_day(self, obj):
+        d = getattr(obj, "occurrence_day", None)
+        return d.isoformat() if d else None
 
     def get_can_edit(self, obj):
         return services.can_edit(self.context["request"].user, obj)

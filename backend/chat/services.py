@@ -286,12 +286,20 @@ def last_messages(conv_ids):
 def summary(user):
     convs = my_conversations(user)
     unread = sum(unread_counts(user, [c.pk for c in convs]).values())
-    return {"unread_messages": unread, "unread_notifications": Notification.objects.filter(user=user, read_at__isnull=True).count()}
+    from agenda.models import Invitation
+
+    pending = Invitation.objects.filter(user=user, seen_at__isnull=True).count()  # invitations non vues = notifications aussi
+    return {"unread_messages": unread, "unread_notifications": Notification.objects.filter(user=user, read_at__isnull=True).count() + pending}
 
 
 # ------------------------------------------------------------------ notifications
-def mark_notifications_read(user, ids=None):
+def mark_notifications_read(user, ids=None, invitations=None):
+    """`ids` : mentions ; `invitations` : invitations à des événements ; tous deux None = tout marquer comme lu."""
+    from agenda.models import Invitation
+
+    everything = ids is None and invitations is None
     qs = Notification.objects.filter(user=user, read_at__isnull=True)
-    if ids is not None:
-        qs = qs.filter(pk__in=ids)
-    return qs.update(read_at=timezone.now())
+    inv = Invitation.objects.filter(user=user, seen_at__isnull=True)
+    if not everything:
+        qs, inv = qs.filter(pk__in=ids or []), inv.filter(pk__in=invitations or [])
+    return qs.update(read_at=timezone.now()) + inv.update(seen_at=timezone.now())

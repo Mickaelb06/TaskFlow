@@ -833,3 +833,35 @@ dialog::backdrop { background: rgba(40, 24, 12, 0.5); backdrop-filter: blur(3px)
 .file-chip small { color: var(--muted); }
 .tnum { font-variant-numeric: tabular-nums; color: var(--teal); font-weight: 600; min-width: 34px; }
 .mention-item .ellipsis { max-width: 320px; }
+
+
+/* événements : glisser-déposer, redimensionnement, séries, invitations */
+.cevent { cursor: grab; touch-action: none; user-select: none; }
+.cevent.ro { cursor: pointer; }
+.cevent.dragging { opacity: 0.85; box-shadow: var(--shadow); z-index: 6; cursor: grabbing; transition: none; }
+.cevent-resize { position: absolute; left: 0; right: 0; bottom: 0; height: 8px; cursor: ns-resize; }
+.cevent-resize::after { content: ""; position: absolute; left: 50%; bottom: 2px; width: 22px; margin-left: -11px; height: 3px; border-radius: 2px; background: color-mix(in srgb, var(--c) 55%, transparent); opacity: 0; }
+.cevent:hover .cevent-resize::after { opacity: 1; }
+.cevent.pending { border-left-style: dashed; background-image: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--c) 12%, transparent) 6px 7px); }
+.cevent.declined, .mevent.declined { opacity: 0.45; }
+.cevent.declined b, .mevent.declined span { text-decoration: line-through; }
+.ebadges { display: inline-flex; gap: 3px; margin-left: 5px; vertical-align: -1px; opacity: 0.75; }
+.ebadges:empty { display: none; }
+.cghost { position: absolute; left: 2px; right: 2px; border-radius: 7px; background: color-mix(in srgb, var(--accent) 22%, transparent); border: 2px dashed var(--accent); pointer-events: none; z-index: 5; font-size: 12px; padding: 2px 6px; color: var(--accent); }
+.when + .when { margin-top: 0; }
+.rec-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+.invitees { display: flex; flex-direction: column; gap: 2px; max-height: 150px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; margin-top: 4px; }
+.invitees label { display: flex; align-items: center; gap: 8px; font-weight: 400; }
+.invitees .st { margin-left: auto; font-size: 11px; color: var(--muted); }
+.rsvp { display: flex; align-items: center; gap: 8px; padding: 8px 10px; margin: 10px 0 0; border-radius: 10px; background: color-mix(in srgb, var(--amber) 14%, transparent); }
+.rsvp .grow { font-size: 13px; }
+.notif.invite .invite-actions { display: flex; gap: 6px; margin-top: 6px; }
+.notif .badge-status { font-size: 11px; padding: 1px 8px; border-radius: 999px; background: var(--hover); color: var(--muted); }
+
+div.block { margin-top: 12px; }
+.label-text { display: block; margin-bottom: 2px; }
+
+.notif.invite { cursor: default; }
+.notif-open { text-align: left; display: flex; flex-direction: column; border-radius: 6px; }
+.notif-open:hover { color: var(--accent); }
+.notif-open small { color: var(--muted); }

@@ -798,6 +798,9 @@ const myTz = () => state.user.timezone || TZ.browserZone();
 const myTz2 = () => state.user.secondary_timezone || "";
 let calToken = 0;
 
+/** L'événement (ou l'occurrence d'une série) représenté par un élément du calendrier. */
+const findEvent = (el) => state.cal.data?.events.find((x) => x.id === Number(el.dataset.id) && (x.occurrence_day || "") === (el.dataset.occ || ""));
+
 async function loadCalendar() {
   const token = ++calToken;
   const { first, last } = CAL.range(state.cal.mode, state.cal.cursor);
@@ -869,47 +872,99 @@ const zoneOptions = (selected) => {
   return group("Vos fuseaux", mine) + group("Tous les fuseaux", [...extra, ...all]);
 };
 
-function eventModal({ ev = null, date = D.iso(state.cal.cursor), startMin = 9 * 60 } = {}) {
+const RECURRENCES = [["", "Ne se répète pas"], ["daily", "Tous les jours"], ["weekdays", "Du lundi au vendredi"], ["weekly", "Toutes les semaines"], ["monthly", "Tous les mois"]];
+const RSVP_LABEL = { organizer: "Organisateur", invited: "Invité", accepted: "Accepté", declined: "Refusé" };
+
+function eventModal({ ev = null, date = D.iso(state.cal.cursor), startMin = 9 * 60, endMin = null } = {}) {
   const tz = myTz();
   const editable = !ev || ev.can_edit;
   const writable = state.projects.filter((p) => p.role !== "viewer" || (ev && ev.project === p.id));
   const hm = (min) => `${TZ.pad(Math.floor(min / 60) % 24)}:${TZ.pad(min % 60)}`;
-  const s = ev ? new Date(ev.starts_at) : null;
-  const e = ev ? new Date(ev.ends_at) : null;
+  // Pour une occurrence d'une série, le formulaire montre les horaires de la SÉRIE : enregistrer ne la déplace pas
+  const s = ev ? new Date(ev.series_starts_at || ev.starts_at) : null;
+  const e = ev ? new Date(ev.series_ends_at || ev.ends_at) : null;
+  const end = endMin ?? startMin + 60;
   const v = ev
     ? { sd: TZ.dayKey(s, tz), st: TZ.hhmm(s, tz), ed: TZ.dayKey(e, tz), et: TZ.hhmm(e, tz) }
-    : { sd: date, st: hm(startMin), ed: startMin + 60 >= 1440 ? D.iso(D.addDays(D.parse(date), 1)) : date, et: hm(startMin + 60) };
+    : { sd: date, st: hm(startMin), ed: end >= 1440 ? D.iso(D.addDays(D.parse(date), 1)) : date, et: hm(end) };
   const dis = editable ? "" : "disabled";
+  const known = new Map((ev?.invitees || []).map((i) => [i.id, i]));
+  const mine = ev?.my_status;
   openModal(ev ? "Événement" : "Nouvel événement", `
     <label class="block">Titre<input name="title" required maxlength="200" value="${esc(ev?.title)}" ${dis} autofocus></label>
+    ${mine && mine !== "organizer" ? `<div class="rsvp"><span class="grow">${esc(ev.creator_name || "Quelqu'un")} vous a invité · vous : <b>${RSVP_LABEL[mine]}</b></span>
+      <button type="button" class="btn sm ${mine === "accepted" ? "primary" : ""}" data-rsvp="accepted">Accepter</button>
+      <button type="button" class="btn sm ${mine === "declined" ? "primary" : ""}" data-rsvp="declined">Refuser</button></div>` : ""}
     <div class="when">
       <label>Début<input type="date" name="sd" required value="${v.sd}" ${dis}></label>
       <label>&nbsp;<input type="time" name="st" required value="${v.st}" ${dis}></label>
       <label>Fin<input type="date" name="ed" required value="${v.ed}" ${dis}></label>
       <label>&nbsp;<input type="time" name="et" required value="${v.et}" ${dis}></label>
     </div>
+    <div class="rec-row">
+      <label>Répétition<select name="recurrence" ${dis}>${RECURRENCES.map(([k, l]) => `<option value="${k}" ${(ev?.recurrence || "") === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+      <label>Jusqu'au (facultatif)<input type="date" name="until" value="${ev?.recurrence_until || ""}" ${dis}></label>
+    </div>
+    ${ev?.recurrence ? '<p class="muted small">Événement récurrent : les modifications s\'appliquent à toute la série.</p>' : ""}
     <label class="block">Fuseau de ces horaires<select name="tz" ${dis}>${zoneOptions(tz)}</select></label>
     <p class="muted small">Le calendrier affiche tout en heure de ${esc(TZ.city(tz))}. Saisissez ici l'heure locale du lieu de l'événement : elle sera convertie.</p>
     <label class="block">Calendrier<select name="project" ${dis}><option value="">Personnel (vous seul)</option>${writable.map((p) =>
       `<option value="${p.id}" ${(ev ? ev.project : state.cal.project) == p.id ? "selected" : ""}>${esc(p.name)} (partagé)</option>`).join("")}</select></label>
+    <div class="block"><span class="label-text">Invités</span><div id="invitees" class="invitees">${editable ? '<p class="muted small">Chargement…</p>'
+      : ((ev.invitees || []).length ? ev.invitees.map((i) => `<div>${avatar(i.username, "xs")} ${esc(i.username)} <span class="st">${RSVP_LABEL[i.status]}</span></div>`).join("") : '<p class="muted small">Aucun invité.</p>')}</div></div>
     <label class="block">Description<textarea name="description" rows="3" ${dis}>${esc(ev?.description)}</textarea></label>
-    ${ev && editable ? '<div class="row"><button class="btn ghost danger" value="delete" formnovalidate>Supprimer</button></div>' : ""}
+    ${ev && editable ? `<div class="row">${ev.recurrence ? '<button class="btn ghost danger" value="delete-one" formnovalidate>Supprimer cette occurrence</button>' : ""}
+      <button class="btn ghost danger" value="delete" formnovalidate>${ev.recurrence ? "Supprimer toute la série" : "Supprimer"}</button></div>` : ""}
     ${editable ? actions(ev ? "Enregistrer" : "Créer") : `<p class="muted small">Lecture seule${ev.creator_name ? ` · créé par ${esc(ev.creator_name)}` : ""}.</p>
       <div class="row end"><button class="btn ghost" value="cancel" formnovalidate>Fermer</button></div>`}`, async (f) => {
     if (!editable) return;
     const body = {
       title: f.title, description: f.description, project: f.project ? Number(f.project) : null,
       starts_at: `${f.sd}T${f.st}`, ends_at: `${f.ed}T${f.et}`, timezone: f.tz,
+      recurrence: f.recurrence || "", recurrence_until: f.recurrence ? f.until || null : null,
+      attendees: [...$("#modal").querySelectorAll('#invitees input[type="checkbox"]')].filter((c) => c.checked).map((c) => Number(c.value)),
     };
     if (ev) await api.updateEvent(ev.id, body); else await api.createEvent(body);
     await loadCalendar();
     render();
   });
-  $("#modal").querySelector('button[value="delete"]')?.addEventListener("click", guard(async (event) => {
+  const box = $("#modal");
+  /* liste des invités possibles : membres du projet choisi, ou collègues pour un événement personnel */
+  const paintInvitees = guard(async () => {
+    const holder = box.querySelector("#invitees");
+    const sel = box.querySelector('select[name="project"]');
+    if (!holder || !editable) return;
+    const checked = new Set([...holder.querySelectorAll("input:checked")].map((c) => Number(c.value)));
+    const first = !holder.dataset.ready;
+    const pid = sel?.value;
+    const people = (pid ? (await api.members(Number(pid))).map((m) => ({ id: m.user_id, username: m.username })) : await api.calendarContacts())
+      .filter((p) => p.id !== state.user.id);
+    holder.dataset.ready = "1";
+    holder.innerHTML = people.length ? people.map((p) => `<label><input type="checkbox" value="${p.id}" ${(first ? known.has(p.id) : checked.has(p.id)) ? "checked" : ""}>
+      ${avatar(p.username, "xs")} <span>${esc(p.username)}</span>${known.has(p.id) ? `<span class="st">${RSVP_LABEL[known.get(p.id).status]}</span>` : ""}</label>`).join("")
+      : '<p class="muted small">Personne à inviter : ajoutez des membres à un projet.</p>';
+  });
+  paintInvitees();
+  box.querySelector('select[name="project"]')?.addEventListener("change", paintInvitees);
+  box.querySelectorAll("[data-rsvp]").forEach((b) => b.addEventListener("click", guard(async () => {
+    await api.rsvp(ev.id, b.dataset.rsvp);
+    box.close();
+    await loadCalendar();
+    state.summary = await api.chatSummary().catch(() => state.summary);
+    render();
+  })));
+  box.querySelector('button[value="delete"]')?.addEventListener("click", guard(async (event) => {
     event.preventDefault();
-    if (!confirm("Supprimer cet événement ?")) return;
+    if (!confirm(ev.recurrence ? "Supprimer toute la série d'événements ?" : "Supprimer cet événement ?")) return;
     await api.deleteEvent(ev.id);
-    $("#modal").close();
+    box.close();
+    await loadCalendar();
+    render();
+  }));
+  box.querySelector('button[value="delete-one"]')?.addEventListener("click", guard(async (event) => {
+    event.preventDefault();
+    await api.skipOccurrence(ev.id, ev.occurrence_day);
+    box.close();
     await loadCalendar();
     render();
   }));
@@ -1114,6 +1169,18 @@ const handlers = {
     await api.markNotifications({ ids: [Number(el.dataset.id)] });
     await openMessages(Number(el.dataset.conv));
   },
+  rsvp: async (el) => {
+    await api.rsvp(Number(el.dataset.event), el.dataset.status);
+    state.notifs = await api.notifications();
+    state.summary = await api.chatSummary();
+    render();
+    toast(el.dataset.status === "accepted" ? "Invitation acceptée." : "Invitation refusée.");
+  },
+  "open-invite": async (el) => {
+    await api.markNotifications({ invitations: [Number(el.dataset.id)] });
+    const day = TZ.dayKey(new Date(el.dataset.start), myTz());
+    await openCalendar({ cursor: D.parse(day), data: null });
+  },
   "notifs-readall": async () => {
     await api.markNotifications({ all: true });
     state.notifs = await api.notifications();
@@ -1150,7 +1217,7 @@ const handlers = {
     eventModal({ date: el.dataset.date, startMin: month ? 9 * 60 : CAL.minuteAt(y) });
   },
   "edit-event": (el) => {
-    const ev = state.cal.data?.events.find((x) => x.id === Number(el.dataset.id));
+    const ev = findEvent(el);
     if (ev) eventModal({ ev });
   },
   "tz-settings": () => timezoneModal(),
@@ -1301,6 +1368,94 @@ document.addEventListener("keydown", (e) => {
   else if (k === "l") setView("list");
   else if (k === "b") setView("board");
   else if (k === "n" && canWrite()) { e.preventDefault(); taskModal(); }
+});
+
+/* ---------- calendrier : déplacer, redimensionner et créer à la souris ---------- */
+let cdrag = null;
+const SNAP = 15; // minutes
+const snap = (px) => Math.round(((px / CAL.HOUR_PX) * 60) / SNAP) * SNAP;
+
+document.addEventListener("pointerdown", (e) => {
+  if (state.page !== "calendar" || state.cal.mode === "month" || e.button !== 0 || $("#modal").open) return;
+  const block = e.target.closest?.(".cevent");
+  const col = e.target.closest?.(".ccol");
+  if (!block && !col) return;
+  const cols = [...document.querySelectorAll(".ccol")];
+  if (block) {
+    const ev = findEvent(block);
+    if (!ev || !ev.can_edit) return;
+    cdrag = { kind: e.target.closest("[data-resize]") ? "resize" : "move", ev, el: block, cols, x0: e.clientX, y0: e.clientY,
+      from: cols.indexOf(block.closest(".ccol")), h0: block.offsetHeight, moved: false, dmin: 0, dcol: 0 };
+  } else {
+    cdrag = { kind: "create", col, cols, y0: e.clientY, top: col.getBoundingClientRect().top, moved: false, a: 0, b: 0 };
+    cdrag.a = Math.max(0, Math.floor((((e.clientY - cdrag.top) / CAL.HOUR_PX) * 60) / SNAP) * SNAP);
+  }
+  block?.setPointerCapture?.(e.pointerId);
+});
+
+document.addEventListener("pointermove", (e) => {
+  const d = cdrag;
+  if (!d) return;
+  if (!d.moved && Math.abs(e.clientY - d.y0) < 5 && Math.abs(e.clientX - (d.x0 ?? e.clientX)) < 5) return;
+  d.moved = true;
+  if (d.kind === "create") {
+    const m = Math.max(0, Math.min(1440, Math.round((((e.clientY - d.top) / CAL.HOUR_PX) * 60) / SNAP) * SNAP));
+    d.b = m;
+    let ghost = d.col.querySelector(".cghost");
+    if (!ghost) { ghost = document.createElement("div"); ghost.className = "cghost"; d.col.appendChild(ghost); }
+    const lo = Math.min(d.a, m);
+    const hi = Math.max(d.a, m, lo + SNAP);
+    ghost.style.top = `${(lo / 60) * CAL.HOUR_PX}px`;
+    ghost.style.height = `${((hi - lo) / 60) * CAL.HOUR_PX}px`;
+    ghost.textContent = `${TZ.hourLabel(lo)} – ${TZ.hourLabel(hi)}`;
+    return;
+  }
+  d.el.classList.add("dragging");
+  d.dmin = snap(e.clientY - d.y0);
+  if (d.kind === "resize") {
+    d.dmin = Math.max(d.dmin, -Math.round(((d.h0 - 18) / CAL.HOUR_PX) * 60 / SNAP) * SNAP);
+    d.el.style.height = `${d.h0 + (d.dmin / 60) * CAL.HOUR_PX}px`;
+    return;
+  }
+  const idx = d.cols.findIndex((c) => { const r = c.getBoundingClientRect(); return e.clientX >= r.left && e.clientX < r.right; });
+  d.dcol = idx < 0 ? 0 : idx - d.from;
+  const dx = d.cols[d.from + d.dcol].getBoundingClientRect().left - d.cols[d.from].getBoundingClientRect().left;
+  d.el.style.transform = `translate(${dx}px, ${(d.dmin / 60) * CAL.HOUR_PX}px)`;
+});
+
+document.addEventListener("pointerup", guard(async () => {
+  const d = cdrag;
+  cdrag = null;
+  if (!d) return;
+  d.col?.querySelector(".cghost")?.remove();
+  if (!d.moved) return; // simple clic : le gestionnaire de clic ouvre la fenêtre
+  suppressClick = true;
+  setTimeout(() => (suppressClick = false), 0);
+  if (d.kind === "create") {
+    const lo = Math.min(d.a, d.b);
+    const hi = Math.max(d.a, d.b, lo + SNAP);
+    return eventModal({ date: d.col.dataset.date, startMin: lo, endMin: hi });
+  }
+  d.el.classList.remove("dragging");
+  if (d.dmin === 0 && d.dcol === 0) { d.el.style.transform = ""; d.el.style.height = ""; return; }
+  const tz = myTz();
+  const ev = d.ev;
+  const start = new Date(ev.series_starts_at || ev.starts_at);
+  const end = new Date(ev.series_ends_at || ev.ends_at);
+  const body = d.kind === "resize"
+    ? { ends_at: TZ.shiftLocal(end, tz, 0, d.dmin), starts_at: TZ.shiftLocal(start, tz), timezone: tz }
+    : { starts_at: TZ.shiftLocal(start, tz, d.dcol, d.dmin), ends_at: TZ.shiftLocal(end, tz, d.dcol, d.dmin), timezone: tz };
+  try {
+    await api.updateEvent(ev.id, body);
+    if (ev.recurrence) toast("Toute la série a été modifiée.");
+  } catch (err) { toast(err.message); }
+  await loadCalendar();
+  renderCalView();
+}));
+
+/* Entrée sur un événement du calendrier = l'ouvrir (accessibilité clavier) */
+document.addEventListener("keydown", (e) => {
+  if ((e.key === "Enter" || e.key === " ") && e.target.classList?.contains?.("cevent")) { e.preventDefault(); handlers["edit-event"](e.target); }
 });
 
 /* ---------- Gantt : déplacer / redimensionner les barres ---------- */

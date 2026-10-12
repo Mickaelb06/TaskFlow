@@ -192,9 +192,24 @@ export function popupHtml(items, active, esc) {
       : `${p.everyone ? '<span class="avatar xs all">@</span>' : avatar(p.name, "xs")}<b>${esc(p.name)}</b>${p.everyone ? '<small class="muted">toute l\'équipe</small>' : ""}`}</button>`).join("");
 }
 
+function inviteRow(n, tz, now, esc) {
+  const when = new Intl.DateTimeFormat("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: tz }).format(new Date(n.starts_at));
+  const answered = n.status !== "invited";
+  return `<div class="notif invite ${n.read ? "" : "unread"}">
+    ${avatar(n.author || "?", "sm")}
+    <span class="notif-main"><button class="notif-open" data-action="open-invite" data-id="${n.id}" data-event="${n.event}" data-start="${esc(n.starts_at)}">
+      <span><b>${esc(n.author || "Utilisateur supprimé")}</b> vous invite à <b>${esc(n.title)}</b></span>
+      <small>${esc(when)}${n.project ? ` · ${esc(n.project)}` : ""}</small></button>
+      <span class="invite-actions">
+        <button class="btn sm ${n.status === "accepted" ? "primary" : ""}" data-action="rsvp" data-event="${n.event}" data-status="accepted">${icon("check", 13)}Accepter</button>
+        <button class="btn sm ${n.status === "declined" ? "primary" : ""}" data-action="rsvp" data-event="${n.event}" data-status="declined">Refuser</button>
+        ${answered ? `<span class="badge-status">${n.status === "accepted" ? "Vous avez accepté" : "Vous avez refusé"}</span>` : ""}</span></span>
+    <time>${esc(whenLabel(n.created_at, tz, now))}</time>${n.read ? "" : '<i class="udot" aria-label="Non lue"></i>'}</div>`;
+}
+
 export function notificationsHtml({ rows, tz, now = new Date(), esc }) {
-  if (!rows.length) return '<div class="empty small-empty"><h2>Aucune notification</h2><p class="muted">Vous serez prévenu ici quand quelqu\'un vous mentionne avec @.</p></div>';
-  return `<div class="notifs">${rows.map((n) => `<button class="notif ${n.read ? "" : "unread"}" data-action="open-notif" data-id="${n.id}" data-conv="${n.conversation}">
+  if (!rows.length) return '<div class="empty small-empty"><h2>Aucune notification</h2><p class="muted">Vous serez prévenu ici quand quelqu\'un vous mentionne avec @ ou vous invite à un événement.</p></div>';
+  return `<div class="notifs">${rows.map((n) => n.type === "invite" ? inviteRow(n, tz, now, esc) : `<button class="notif ${n.read ? "" : "unread"}" data-action="open-notif" data-id="${n.id}" data-conv="${n.conversation}">
     ${avatar(n.author || "?", "sm")}<span class="notif-main"><span><b>${esc(n.author || "Utilisateur supprimé")}</b> ${n.everyone ? "a prévenu tout le monde" : "vous a mentionné"} dans <b>${esc(n.conversation_title)}</b></span>
     <small>${esc(n.excerpt)}</small></span><time>${esc(whenLabel(n.created_at, tz, now))}</time>${n.read ? "" : '<i class="udot" aria-label="Non lue"></i>'}</button>`).join("")}</div>`;
 }

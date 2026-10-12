@@ -212,7 +212,11 @@ class SummaryView(APIView):
 
 
 class NotificationsView(APIView):
+    """Mentions (`type: mention`) et invitations à des événements (`type: invite`), les plus récentes d'abord."""
+
     def get(self, request):
+        from agenda.models import Invitation
+
         rows = Notification.objects.filter(user=request.user).select_related(
             "message__author", "message__conversation__project", "message__conversation__user_a", "message__conversation__user_b")[:50]
         out = []
@@ -221,14 +225,24 @@ class NotificationsView(APIView):
             direct = conv.kind == Conversation.Kind.DIRECT
             other = (conv.user_b if conv.user_a_id == request.user.pk else conv.user_a) if direct else None
             out.append({
-                "id": n.pk, "read": n.read_at is not None, "created_at": n.created_at,
+                "type": "mention", "id": n.pk, "read": n.read_at is not None, "created_at": n.created_at,
                 "conversation": conv.pk, "conversation_title": other.username if direct else conv.project.name,
                 "message": msg.pk, "author": msg.author.username if msg.author else None, "excerpt": _excerpt(msg.content, 140),
                 "everyone": msg.mentions_all,
             })
-        return Response(out)
+        for inv in Invitation.objects.filter(user=request.user).select_related("event__creator", "event__project").order_by("-id")[:50]:
+            ev = inv.event
+            out.append({
+                "type": "invite", "id": inv.pk, "read": inv.seen_at is not None, "created_at": inv.created_at, "event": ev.pk,
+                "title": ev.title, "starts_at": ev.starts_at, "author": ev.creator.username if ev.creator else None,
+                "project": ev.project.name if ev.project else None, "status": inv.status,
+            })
+        out.sort(key=lambda r: r["created_at"], reverse=True)
+        return Response(out[:50])
 
     def post(self, request):
-        """{ids: [...]} ou {all: true}."""
-        ids = None if request.data.get("all") else [int(i) for i in request.data.get("ids", []) if str(i).isdigit()]
-        return Response({"marked": services.mark_notifications_read(request.user, ids)})
+        """{ids: [mentions], invitations: [invitations]} ou {all: true}."""
+        digits = lambda key: [int(i) for i in request.data.get(key, []) if str(i).isdigit()]
+        if request.data.get("all"):
+            return Response({"marked": services.mark_notifications_read(request.user)})
+        return Response({"marked": services.mark_notifications_read(request.user, digits("ids"), digits("invitations"))})

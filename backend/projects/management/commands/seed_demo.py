@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from projects.models import Membership
 from projects.services import create_project
-from agenda.models import Event
+from agenda.models import Event, Invitation
 from tasks.models import Comment, Task
 from zoneinfo import ZoneInfo
 
@@ -85,13 +85,15 @@ class Command(BaseCommand):
         if demo is None or Event.objects.filter(starts_at__gte=datetime.combine(monday, time.min, tzinfo=paris)).exists():
             return
 
-        def add(day, h, mi, minutes, title, project=None, tz="Europe/Paris", description=""):
+        def add(day, h, mi, minutes, title, project=None, tz="Europe/Paris", description="", creator=None, **extra):
             start = datetime.combine(monday + timedelta(days=day), time(h, mi), tzinfo=ZoneInfo(tz))
-            Event.objects.create(project=project, creator=demo, title=title, description=description, timezone=tz,
-                                 starts_at=start, ends_at=start + timedelta(minutes=minutes))
+            return Event.objects.create(project=project, creator=creator or demo, title=title, description=description, timezone=tz,
+                                        starts_at=start, ends_at=start + timedelta(minutes=minutes), **extra)
 
-        for day in range(5):
-            add(day, 9, 30, 15, "Point quotidien", site)
+        add(0, 9, 30, 15, "Point quotidien", site, recurrence="weekdays", description="Série du lundi au vendredi.")
+        lea = User.objects.filter(username="lea").first()
+        if lea:
+            Invitation.objects.create(event=add(2, 15, 0, 45, "Démo au client", None, creator=lea, description="Présentation de la maquette."), user=demo)
         add(1, 14, 0, 90, "Revue des maquettes", site, description="Valider la page d'accueil avant intégration.")
         add(2, 11, 0, 60, "Appel avec le prestataire (Montréal)", site, tz="America/Montreal", description="11 h à Montréal = 17 h en France.")
         add(3, 14, 30, 60, "Revue des maquettes — suite", site)

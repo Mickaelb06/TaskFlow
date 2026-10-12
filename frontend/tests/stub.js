@@ -82,8 +82,10 @@ const routes = {
   "/chat/search/": [{ message: 2, conversation: 10, conversation_title: "Projet <b>A</b>", author: "alice", excerpt: "Bien reçu merci @bob", created_at: dt(0) }],
   "/chat/summary/": { unread_messages: 2, unread_notifications: 1 },
   "/chat/contacts/": [bob, carol],
+  "/calendar/contacts/": [bob, carol],
   "/notifications/": [
-    { id: 1, read: false, created_at: dt(0), conversation: 10, conversation_title: "Projet <b>A</b>", message: 1, author: "bob", excerpt: "Salut <b>@alice</b>", everyone: false },
+    { type: "invite", id: 4, read: false, created_at: dt(0), event: 6, title: "Invitation <b>x</b>", starts_at: at(1, 10), author: "bob", project: "Projet <b>A</b>", status: "invited" },
+    { type: "mention", id: 1, read: false, created_at: dt(0), conversation: 10, conversation_title: "Projet <b>A</b>", message: 1, author: "bob", excerpt: "Salut <b>@alice</b>", everyone: false },
     { id: 2, read: true, created_at: dt(-2), conversation: 10, conversation_title: "Projet <b>A</b>", message: 5, author: "carol", excerpt: "réunion", everyone: true },
   ],
   "/calendar/": {
@@ -93,6 +95,10 @@ const routes = {
       ev(2, "Chevauchement", at(0, 10, 30), at(0, 12), { project: null, project_name: null }),
       ev(3, "Lecture seule", at(0, 15), at(0, 16), { can_edit: false, creator_name: "bob" }),
       ev(4, "Nuit", at(0, 22), at(1, 2)),
+      ev(5, "Atelier <i>série</i>", at(0, 16), at(0, 17), { recurrence: "weekly", recurrence_until: null, occurrence_day: day(0), series_starts_at: at(-7, 16), series_ends_at: at(-7, 17),
+        invitees: [{ id: 2, username: "bob", status: "invited" }, { id: 3, username: "carol", status: "accepted" }] }),
+      ev(6, "Invitation", at(0, 18), at(0, 19), { my_status: "invited", can_edit: false, creator_name: "bob", invitees: [{ id: 1, username: "alice", status: "invited" }] }),
+      ev(7, "Refusé", at(0, 20), at(0, 21), { my_status: "declined", can_edit: false }),
     ],
     tasks: [{ id: 2, project: 7, project_name: "Projet <b>A</b>", title: "Maquettes <script>alert(1)</script>", status: "doing", priority: 1,
       start_date: day(-3), due_date: day(0), is_milestone: false, assignee_name: "bob" }],
