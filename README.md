@@ -1,7 +1,5 @@
 # TaskFlow — gestion de projet et de tâches, solo ou en équipe
 
-
-
 Application web de gestion de projet, seul ou en équipe : tâches et Gantt, calendrier à fuseaux horaires, messagerie interne avec mentions, suivi du temps, charge d'équipe et administration.
 
 ## Fonctionnalités
