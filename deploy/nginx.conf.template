@@ -3,6 +3,7 @@ server {
   listen ${PORT};
   root /usr/share/nginx/html;
   index index.html;
+  absolute_redirect off;  # derrière le proxy, le port interne ne doit pas apparaître dans les redirections
   access_log /dev/stdout;
   error_log /dev/stderr warn;
 
