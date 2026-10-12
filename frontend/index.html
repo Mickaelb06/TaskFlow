@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TaskFlow</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="config.js"></script>
+  <script>
+    // Filet de sécurité : une erreur JavaScript ne doit jamais laisser un écran vide sans explication.
+    (function () {
+      function show(msg) {
+        var b = document.getElementById("fatal");
+        if (!b) { b = document.createElement("div"); b.id = "fatal"; b.setAttribute("role", "alert"); document.body.appendChild(b); }
+        b.textContent = "Erreur d'affichage : " + msg + " — rechargez la page avec Cmd+Maj+R (ou Ctrl+F5). Si le problème persiste, signalez ce message.";
+      }
+      window.addEventListener("error", function (e) { show(e.message || "script introuvable"); });
+      window.addEventListener("unhandledrejection", function (e) { show((e.reason && e.reason.message) || String(e.reason)); });
+    })();
+  </script>
+</head>
+<body>
+  <div id="auth" hidden>
+    <div class="auth-card">
+      <div class="brand big"><span class="logo">✓</span> TaskFlow</div>
+      <p class="muted">Vos tâches, seul ou en équipe, dans un calendrier.</p>
+      <div class="seg" id="auth-tabs">
+        <button class="on" data-auth-tab="login">Connexion</button>
+        <button data-auth-tab="register">Inscription</button>
+      </div>
+      <form id="login-form" class="stack">
+        <label>Nom d'utilisateur<input name="username" required autocomplete="username"></label>
+        <label>Mot de passe<input name="password" type="password" required autocomplete="current-password"></label>
+        <button class="btn primary">Se connecter</button>
+      </form>
+      <form id="register-form" class="stack" hidden>
+        <label>Nom d'utilisateur<input name="username" required autocomplete="username"></label>
+        <label>Email<input name="email" type="email" required autocomplete="email"></label>
+        <label>Mot de passe<input name="password" type="password" required minlength="8" autocomplete="new-password"></label>
+        <button class="btn primary">Créer mon compte</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="app" hidden>
+    <aside id="sidebar"></aside>
+    <main>
+      <header id="toolbar"></header>
+      <section id="view"></section>
+    </main>
+    <aside id="panel"></aside>
+  </div>
+
+  <dialog id="modal"></dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

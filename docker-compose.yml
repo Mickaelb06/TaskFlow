@@ -1,0 +1,22 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: taskflow
+      POSTGRES_PASSWORD: taskflow
+      POSTGRES_DB: taskflow
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+  api:
+    build: ./backend
+    env_file: .env
+    environment:
+      POSTGRES_HOST: db
+    depends_on: [db]
+    ports: ["8000:8000"]
+  web:
+    build: ./frontend
+    depends_on: [api]
+    ports: ["8080:80"]
+volumes:
+  pgdata:
