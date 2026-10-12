@@ -34,7 +34,24 @@ L'image `api` applique les migrations au démarrage. Volumes : `pgdata` (base) e
 | `NUM_PROXIES` | nombre de proxys devant l'API (pour lire la vraie adresse IP des clients) | `1` derrière nginx |
 
 ## Railway
-Trois éléments dans un même projet Railway : la base, l'API et le front. Railway n'exécute pas `docker-compose.yml` : chaque service se construit à partir de son Dockerfile (`backend/railway.json`, `frontend/railway.json`).
+Deux montages possibles. Railway n'exécute pas `docker-compose.yml`.
+
+### A. Un seul service (le plus simple) — `Dockerfile` et `railway.json` à la racine
+Un conteneur contient nginx (front, port public) et gunicorn (API, interne) ; `deploy/start.sh` lance les migrations puis les deux processus.
+1. **Base** : *New → Database → PostgreSQL*.
+2. **Service** : *New → GitHub Repo*, **Root Directory vide** (racine du dépôt). Ajouter un **Volume** monté sur `/data/media`. Variables :
+   - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` (adapter `Postgres` au nom du service de base)
+   - `DJANGO_SECRET_KEY` = valeur aléatoire (`python -c "import secrets;print(secrets.token_urlsafe(50))"`)
+   - `DJANGO_DEBUG` = `0`
+   - `DJANGO_ALLOWED_HOSTS` = `<domaine>.up.railway.app,healthcheck.railway.app`
+   - `MEDIA_ROOT` = `/data/media`
+   - `NUM_PROXIES` = `2` (proxy Railway puis nginx)
+   - `SITE_URL` = `https://<domaine>.up.railway.app`
+3. *Settings → Networking → Generate Domain*.
+4. Premier administrateur : `railway run python manage.py createsuperuser`.
+
+### B. Trois éléments séparés (base, API, front)
+Chaque service se construit à partir de son Dockerfile (`backend/railway.json`, `frontend/railway.json`).
 
 1. **Base** : *New → Database → PostgreSQL*.
 2. **Service `api`** : *New → GitHub Repo*, **Root Directory** = `backend`. Nommer le service `api`. Ajouter un **Volume** monté sur `/data/media` (pièces jointes). Variables :

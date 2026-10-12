@@ -1,0 +1,9 @@
+.git
+**/.venv/
+**/planning_rs/target/
+**/__pycache__/
+backend/db.sqlite3
+backend/media/
+frontend/tests/
+.logs/
+e2e/
