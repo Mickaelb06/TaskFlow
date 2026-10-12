@@ -86,3 +86,14 @@ CORS_ALLOWED_ORIGINS = [o for o in os.environ.get("CORS_ALLOWED_ORIGINS", "").sp
 
 if "test" in sys.argv[:2]:  # tests : hachage rapide (PBKDF2 ralentit chaque création de compte) — jamais en production
     PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+
+# E-mails (mentions, invitations, résumé du matin). Par défaut : affichés dans la console du serveur, rien n'est envoyé.
+# En production : EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend + EMAIL_HOST, EMAIL_PORT, EMAIL_HOST_USER, EMAIL_HOST_PASSWORD.
+EMAIL_BACKEND = os.environ.get("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "localhost")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "25"))
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "0") == "1"
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "TaskFlow <no-reply@taskflow.local>")
+SITE_URL = os.environ.get("SITE_URL", "http://localhost:5173")  # adresse publique du front, pour les liens des e-mails

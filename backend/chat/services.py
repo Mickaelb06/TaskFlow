@@ -158,6 +158,9 @@ def _notify(msg, author, conv, already):
         msg.mentions.set(mentioned)
     if fresh:
         Notification.objects.bulk_create([Notification(user=u, message=msg) for u in fresh], ignore_conflicts=True)
+        from accounts.emails import notify_mentions
+
+        notify_mentions(msg, fresh)
     if everyone != msg.mentions_all:
         Message.objects.filter(pk=msg.pk).update(mentions_all=everyone)
         msg.mentions_all = everyone

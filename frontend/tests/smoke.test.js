@@ -203,6 +203,7 @@ print("# Mon compte");
 await act("account");
 m = e["#modal"].innerHTML;
 ok("Mon compte : export, fuseaux, suppression avec mot de passe", m.includes("Exporter mes données") && m.includes('data-account="delete"') && m.includes('name="password"') && m.includes("a@x.fr") && m.includes("signés « Utilisateur supprimé »"));
+ok("Mon compte : préférences de notification (e-mail à chaque mention, résumé du matin, notifications du navigateur)", m.includes('data-pref="notify_email"') && m.includes('data-pref="digest_email"') && m.includes('data-account="browser-notif"') && /data-pref="notify_email" checked/.test(m) && !/data-pref="digest_email" checked/.test(m));
 ok("l'avatar du pied de barre ouvre Mon compte", e["#sidebar"].innerHTML.includes('data-action="account"'));
 
 print("# Administration");

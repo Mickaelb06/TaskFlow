@@ -35,9 +35,12 @@ class UserSerializer(serializers.ModelSerializer):
     timezone = serializers.CharField(source="profile.timezone", required=False, max_length=64)
     secondary_timezone = serializers.CharField(source="profile.secondary_timezone", required=False, allow_blank=True, max_length=64)
 
+    notify_email = serializers.BooleanField(source="profile.notify_email", required=False)
+    digest_email = serializers.BooleanField(source="profile.digest_email", required=False)
+
     class Meta:
         model = User
-        fields = ["id", "username", "email", "is_staff", "is_superuser", "timezone", "secondary_timezone"]
+        fields = ["id", "username", "email", "is_staff", "is_superuser", "timezone", "secondary_timezone", "notify_email", "digest_email"]
         read_only_fields = ["username", "email", "is_staff", "is_superuser"]
 
     def validate_timezone(self, value):

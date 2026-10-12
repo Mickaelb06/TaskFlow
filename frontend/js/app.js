@@ -769,7 +769,10 @@ document.addEventListener("keydown", guard(async (e) => {
 async function pollChat() {
   if (!state.user || document.hidden || $("#app")?.hidden) return;
   const grew = await refreshChat();
-  if (grew) toast("Vous avez une nouvelle notification (cloche en haut de la barre latérale).");
+  if (grew) {
+    toast("Vous avez une nouvelle notification (cloche en haut de la barre latérale).");
+    systemNotify().catch(() => {});
+  }
   const c = state.chat;
   if (state.page === "messages" && c.current) {
     const last = c.messages.length ? c.messages[c.messages.length - 1].id : 0;
@@ -971,6 +974,20 @@ function eventModal({ ev = null, date = D.iso(state.cal.cursor), startMin = 9 * 
   }));
 }
 
+function browserNotifLabel() {
+  if (!("Notification" in window)) return "Notifications du navigateur indisponibles";
+  return { granted: "Notifications du navigateur activées", denied: "Notifications du navigateur bloquées", default: "Activer les notifications du navigateur" }[Notification.permission];
+}
+
+/** Notification système quand l'onglet n'est pas au premier plan (seulement si la personne l'a autorisée). */
+async function systemNotify() {
+  if (!("Notification" in window) || Notification.permission !== "granted" || document.hasFocus?.()) return;
+  const unread = (await api.notifications()).find((n) => !n.read);
+  if (!unread) return;
+  const body = unread.type === "invite" ? `${unread.author} vous invite à « ${unread.title} »` : `${unread.author || "Quelqu'un"} : ${unread.excerpt}`;
+  new Notification("TaskFlow", { body, tag: "taskflow-notif" });
+}
+
 function accountModal() {
   const u = state.user;
   openModal("Mon compte", `
@@ -979,6 +996,10 @@ function accountModal() {
     <p class="muted small">Téléchargez tout ce que TaskFlow conserve à votre sujet (compte, projets, tâches, commentaires, événements, messages) dans un fichier JSON.</p>
     <div class="row"><button type="button" class="btn" data-account="export">Exporter mes données</button>
       <button type="button" class="btn" data-account="timezone">Fuseaux horaires</button></div>
+    <h3>Notifications</h3>
+    <label class="inline check-label block"><input type="checkbox" data-pref="notify_email" ${u.notify_email !== false ? "checked" : ""}> M'envoyer un e-mail quand on me mentionne ou m'invite</label>
+    <label class="inline check-label block"><input type="checkbox" data-pref="digest_email" ${u.digest_email ? "checked" : ""}> Résumé de ma journée par e-mail, chaque matin</label>
+    <div class="row"><button type="button" class="btn" data-account="browser-notif" ${"Notification" in window ? "" : "disabled"}>${browserNotifLabel()}</button></div>
     <h3 class="danger-title">Supprimer mon compte</h3>
     <p class="muted small">Définitif. Les projets où vous êtes seul(e) sont supprimés ; vos messages et commentaires restent, signés « Utilisateur supprimé ». Pour un projet partagé, cédez d'abord la propriété (Membres → Céder).</p>
     <label class="block">Mot de passe<input type="password" name="password" autocomplete="current-password"></label>
@@ -986,6 +1007,16 @@ function accountModal() {
     <div class="row end"><button class="btn ghost" value="cancel" formnovalidate>Fermer</button></div>`);
   const box = $("#modal");
   box.querySelector('[data-account="export"]')?.addEventListener("click", guard(async () => { await api.downloadExport(); toast("Fichier téléchargé."); }));
+  box.querySelectorAll("[data-pref]").forEach((c) => c.addEventListener("change", guard(async () => {
+    const me = await api.updateMe({ [c.dataset.pref]: c.checked });
+    state.user = { ...state.user, ...me };
+    toast("Préférence enregistrée.");
+  })));
+  box.querySelector('[data-account="browser-notif"]')?.addEventListener("click", guard(async (e) => {
+    if (Notification.permission === "denied") return void toast("Les notifications sont bloquées : autorisez-les dans les réglages du navigateur pour ce site.");
+    await Notification.requestPermission();
+    e.target.textContent = browserNotifLabel();
+  }));
   box.querySelector('[data-account="timezone"]')?.addEventListener("click", () => timezoneModal());
   box.querySelector('[data-account="delete"]')?.addEventListener("click", guard(async () => {
     const password = box.querySelector('input[name="password"]').value;

@@ -33,6 +33,8 @@ class Profile(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="profile")
     timezone = models.CharField(max_length=64, default="Europe/Paris")  # nom IANA
     secondary_timezone = models.CharField(max_length=64, blank=True)  # 2e colonne d'heures (comme Notion Calendar)
+    notify_email = models.BooleanField(default=True)  # e-mail à chaque mention ou invitation
+    digest_email = models.BooleanField(default=False)  # résumé du matin (commande `send_digest`)
 
     @classmethod
     def for_user(cls, user):

@@ -100,7 +100,11 @@ def set_invitees(user, event, user_ids):
         raise ValidationError("On ne peut inviter que des membres du projet (ou, pour un événement personnel, des collègues).")
     event.invitations.exclude(user_id__in=ids).delete()
     for u in allowed:
-        Invitation.objects.get_or_create(event=event, user=u)
+        inv, created = Invitation.objects.get_or_create(event=event, user=u)
+        if created:
+            from accounts.emails import notify_invitation
+
+            notify_invitation(inv)
 
 
 def rsvp(user, event, status):
