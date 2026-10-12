@@ -1,12 +1,15 @@
+from datetime import date
+
 from django.shortcuts import get_object_or_404
+from rest_framework.views import APIView
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
-from . import services
+from . import services, templates
 from .mixins import ProjectScopedMixin
-from .models import Membership, Project
+from .models import Membership, Project, ProjectTemplate
 from .serializers import AddMemberSerializer, MembershipSerializer, ProjectSerializer, RoleSerializer
 
 
@@ -36,6 +39,12 @@ class ProjectViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         self._require_owner(instance)
         instance.delete()
+
+    @action(detail=True, methods=["post"], url_path="save-template")
+    def save_template(self, request, pk=None):
+        """POST /projects/{id}/save-template/ {name, description?} — enregistrer la structure comme modèle (propriétaire)."""
+        tpl = templates.save_as_template(request.user, self.get_object(), request.data.get("name"), str(request.data.get("description", "")))
+        return Response({"id": tpl.pk, "name": tpl.name, "tasks": len(tpl.tasks)}, status=201)
 
     @action(detail=True, methods=["post"])
     def transfer(self, request, pk=None):
@@ -84,3 +93,29 @@ class MemberViewSet(
 
     def perform_destroy(self, instance):
         services.remove_member(self.request.user, instance)
+
+
+class TemplateListView(APIView):
+    """GET /templates/ — modèles fournis + les miens."""
+
+    def get(self, request):
+        return Response(templates.catalog(request.user))
+
+
+class TemplateDetailView(APIView):
+    def delete(self, request, pk):
+        tpl = get_object_or_404(ProjectTemplate, pk=pk, owner=request.user)  # le modèle d'un autre : 404
+        templates.delete_template(request.user, tpl)
+        return Response(status=204)
+
+
+class FromTemplateView(APIView):
+    """POST {template, name?, start_date?} — crée un projet depuis un modèle."""
+
+    def post(self, request):
+        try:
+            start = date.fromisoformat(request.data["start_date"]) if request.data.get("start_date") else None
+        except ValueError:
+            return Response({"start_date": "Date attendue (AAAA-MM-JJ)."}, status=400)
+        project = templates.create_from_template(request.user, request.data.get("template"), request.data.get("name"), start)
+        return Response(ProjectSerializer(project, context={"request": request}).data, status=201)

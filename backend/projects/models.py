@@ -29,3 +29,17 @@ class Membership(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["project", "user"], name="unique_member_per_project")]
+
+
+class ProjectTemplate(models.Model):
+    """Modèle de projet personnel : une liste de tâches avec des décalages relatifs au démarrage (voir `templates.py`)."""
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="project_templates")
+    name = models.CharField(max_length=120)
+    description = models.TextField(blank=True)
+    skip_weekends = models.BooleanField(default=False)
+    tasks = models.JSONField(default=list)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name", "id"]
