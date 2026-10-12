@@ -228,7 +228,7 @@ function renderSidebar() {
         data-action="select-project" data-id="${p.id}" title="${esc(p.name)}"><span class="dot" style="--h:${hue(p.name)}"></span><span class="lbl ellipsis">${esc(p.name)}</span>${badge(projectUnread(p.id))}</button>`).join("")
         || '<p class="muted small pad lbl">Aucun projet</p>'}</div>
     </div>
-    <div class="side-foot">${avatar(u.username)}<span class="lbl grow ellipsis">${esc(u.username)}</span>
+    <div class="side-foot"><button class="me-btn" data-action="account" title="Mon compte">${avatar(u.username)}<span class="lbl grow ellipsis">${esc(u.username)}</span></button>
       ${u.is_staff ? `<button class="icon-btn ${state.page === "admin" ? "active" : ""}" data-action="go-admin" title="Administration" aria-label="Administration">${icon("shield")}</button>` : ""}
       <button class="icon-btn" data-action="theme" title="Changer de thème" aria-label="Changer de thème">${icon(document.documentElement.dataset.theme === "dark" ? "sun" : "moon")}</button>
       <button class="icon-btn" data-action="logout" title="Se déconnecter" aria-label="Se déconnecter">${icon("logout")}</button></div>`;
@@ -494,6 +494,7 @@ function membersModal() {
     <span class="grow">${esc(m.username)}${m.user_id === state.user.id ? ' <span class="muted small">(vous)</span>' : ""}</span>
     ${owner && m.role !== "owner"
       ? `<select data-change="role" data-uid="${m.user_id}">${["member", "viewer"].map((r) => `<option value="${r}" ${m.role === r ? "selected" : ""}>${ROLE[r]}</option>`).join("")}</select>
+         <button type="button" class="btn ghost sm" data-action="transfer-owner" data-uid="${m.user_id}" title="Céder la propriété du projet à ${esc(m.username)}">Céder</button>
          <button type="button" class="icon-btn" data-action="remove-member" data-uid="${m.user_id}" title="Retirer" aria-label="Retirer">${icon("x", 15)}</button>`
       : `<span class="muted small">${ROLE[m.role]}</span>`}</div>`).join("");
   const add = owner ? `<h3>Inviter</h3><div class="row">
@@ -813,6 +814,34 @@ function eventModal({ ev = null, date = D.iso(state.cal.cursor), startMin = 9 * 
   }));
 }
 
+function accountModal() {
+  const u = state.user;
+  openModal("Mon compte", `
+    <div class="account-head">${avatar(u.username)}<div><b>${esc(u.username)}</b><div class="muted small">${esc(u.email)}${u.is_staff ? " · administrateur" : ""}</div></div></div>
+    <h3>Mes données</h3>
+    <p class="muted small">Téléchargez tout ce que TaskFlow conserve à votre sujet (compte, projets, tâches, commentaires, événements, messages) dans un fichier JSON.</p>
+    <div class="row"><button type="button" class="btn" data-account="export">Exporter mes données</button>
+      <button type="button" class="btn" data-account="timezone">Fuseaux horaires</button></div>
+    <h3 class="danger-title">Supprimer mon compte</h3>
+    <p class="muted small">Définitif. Les projets où vous êtes seul(e) sont supprimés ; vos messages et commentaires restent, signés « Utilisateur supprimé ». Pour un projet partagé, cédez d'abord la propriété (Membres → Céder).</p>
+    <label class="block">Mot de passe<input type="password" name="password" autocomplete="current-password"></label>
+    <div class="row"><button type="button" class="btn ghost danger" data-account="delete">Supprimer définitivement mon compte</button></div>
+    <div class="row end"><button class="btn ghost" value="cancel" formnovalidate>Fermer</button></div>`);
+  const box = $("#modal");
+  box.querySelector('[data-account="export"]')?.addEventListener("click", guard(async () => { await api.downloadExport(); toast("Fichier téléchargé."); }));
+  box.querySelector('[data-account="timezone"]')?.addEventListener("click", () => timezoneModal());
+  box.querySelector('[data-account="delete"]')?.addEventListener("click", guard(async () => {
+    const password = box.querySelector('input[name="password"]').value;
+    if (!password) return void toast("Saisissez votre mot de passe pour confirmer.");
+    if (!confirm("Supprimer définitivement votre compte ? Cette action est irréversible.")) return;
+    await api.deleteAccount(password);
+    box.close();
+    auth.logout();
+    showAuth();
+    toast("Votre compte a été supprimé.");
+  }));
+}
+
 function timezoneModal() {
   const tz = myTz();
   const here = TZ.browserZone();
@@ -934,6 +963,16 @@ const handlers = {
     state.notifs = await api.notifications();
     state.summary = { ...state.summary, unread_notifications: 0 };
     render();
+  },
+  account: () => accountModal(),
+  "transfer-owner": async (el) => {
+    const m = state.members.find((x) => x.user_id === Number(el.dataset.uid));
+    if (!confirm(`Céder la propriété de « ${state.project.name} » à ${m.username} ? Vous deviendrez simple membre.`)) return;
+    Object.assign(state.project, await api.transferProject(state.project.id, m.user_id));
+    state.members = await api.members(state.project.id);
+    $("#modal").close();
+    render();
+    toast(`${m.username} est maintenant propriétaire.`);
   },
   "toggle-side": () => { auth.pref.set("side", sideCollapsed() ? "open" : "collapsed"); renderSidebar(); },
   "cal-prev": () => calShift(-1),

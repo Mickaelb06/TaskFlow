@@ -6,7 +6,7 @@ import { barChart } from "./charts.js";
 const ACTION_LABEL = {
   "user.create": "Utilisateur créé", "user.update": "Utilisateur modifié", "user.activate": "Compte réactivé",
   "user.deactivate": "Compte désactivé", "user.promote": "Droits admin accordés", "user.demote": "Droits admin retirés",
-  "user.password_reset": "Mot de passe réinitialisé", "user.delete": "Utilisateur supprimé",
+  "user.password_reset": "Mot de passe réinitialisé", "user.delete": "Utilisateur supprimé", "user.self_delete": "Compte supprimé par son titulaire",
   "project.delete": "Projet supprimé", "project.transfer": "Projet transféré", "settings.update": "Réglages modifiés",
 };
 const SETTING_LABEL = { allow_registration: "Inscriptions ouvertes" };

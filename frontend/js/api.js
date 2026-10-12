@@ -64,6 +64,19 @@ export const api = {
   },
   register: (body) => request("/auth/register/", { method: "POST", body, anon: true }),
   me: () => request("/me/"),
+  deleteAccount: (password) => request("/me/", { method: "DELETE", body: { password } }),
+  transferProject: (pid, user_id) => request(`/projects/${pid}/transfer/`, { method: "POST", body: { user_id } }),
+  /** Télécharge un fichier JSON protégé : fetch avec le jeton, puis lien temporaire. */
+  async downloadExport() {
+    const res = await fetch(BASE + "/me/export/", { headers: { Authorization: `Bearer ${store.get("access")}` } });
+    if (!res.ok) throw new Error(errorMessage(await res.json().catch(() => null), res.status));
+    const url = URL.createObjectURL(await res.blob());
+    const a = Object.assign(document.createElement("a"), { href: url, download: "taskflow-mes-donnees.json" });
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  },
   updateMe: (body) => request("/me/", { method: "PATCH", body }),
   calendar: (q) => request(`/calendar/?${new URLSearchParams(q)}`),
   createEvent: (body) => request("/events/", { method: "POST", body }),

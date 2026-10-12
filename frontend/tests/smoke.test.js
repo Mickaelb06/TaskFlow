@@ -157,6 +157,12 @@ ok("barre latérale repliable : le bouton propose d'agrandir", e["#sidebar"].inn
 await act("toggle-side");
 ok("… et dépliable : le bouton propose de réduire", e["#sidebar"].innerHTML.includes("Réduire la barre latérale"));
 
+print("# Mon compte");
+await act("account");
+m = e["#modal"].innerHTML;
+ok("Mon compte : export, fuseaux, suppression avec mot de passe", m.includes("Exporter mes données") && m.includes('data-account="delete"') && m.includes('name="password"') && m.includes("a@x.fr") && m.includes("signés « Utilisateur supprimé »"));
+ok("l'avatar du pied de barre ouvre Mon compte", e["#sidebar"].innerHTML.includes('data-action="account"'));
+
 print("# Administration");
 await act("go-admin");
 v = view();

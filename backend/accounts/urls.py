@@ -1,12 +1,14 @@
 from django.urls import path
 
 from . import admin_views as admin
-from .views import MeView, PublicConfigView, RegisterView
+from .views import ExportView, LoginView, MeView, PublicConfigView, RegisterView
 
 urlpatterns = [
     path("auth/register/", RegisterView.as_view()),
     path("auth/config/", PublicConfigView.as_view()),
+    path("auth/token/", LoginView.as_view()),
     path("me/", MeView.as_view()),
+    path("me/export/", ExportView.as_view()),
     # --- administration (réservée aux comptes is_staff)
     path("admin/stats/", admin.StatsView.as_view()),
     path("admin/users/", admin.UserListCreateView.as_view()),

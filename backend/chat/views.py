@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from projects.models import Membership
+from taskflow.throttles import WritesOnlyThrottle
 
 from . import services
 from .models import Conversation, Message, Notification
@@ -90,6 +91,9 @@ class ContactsView(APIView):
 
 
 class MessagesView(APIView):
+    throttle_classes = [WritesOnlyThrottle]
+    throttle_scope = "chat"
+
     def get(self, request, pk):
         conv = _conversation_or_404(request.user, pk)
         q = request.query_params

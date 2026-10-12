@@ -1,5 +1,6 @@
 from django.shortcuts import get_object_or_404
 from rest_framework import mixins, status, viewsets
+from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
@@ -35,6 +36,13 @@ class ProjectViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         self._require_owner(instance)
         instance.delete()
+
+    @action(detail=True, methods=["post"])
+    def transfer(self, request, pk=None):
+        """POST /projects/{id}/transfer/ {user_id} — céder la propriété à un membre."""
+        project = self.get_object()
+        services.transfer_to_member(request.user, project, request.data.get("user_id"))
+        return Response(ProjectSerializer(project, context={"request": request}).data)
 
 
 class MemberViewSet(

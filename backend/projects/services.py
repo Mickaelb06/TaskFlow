@@ -60,6 +60,17 @@ def remove_member(actor, membership):
     membership.delete()
 
 
+def transfer_to_member(actor, project, user_id):
+    """Le propriétaire cède le projet à un de ses membres (il devient simple membre)."""
+    _require_owner(actor, project)
+    target = Membership.objects.filter(project=project, user_id=user_id).select_related("user").first()
+    if target is None:
+        raise ValidationError("Le nouveau propriétaire doit déjà être membre du projet.")
+    if target.user_id == actor.pk:
+        raise ValidationError("Vous êtes déjà propriétaire.")
+    return transfer_ownership(project, target.user)
+
+
 @transaction.atomic
 def transfer_ownership(project, new_owner):
     """Un projet a toujours exactement un propriétaire : l'ancien reste membre, le nouveau devient propriétaire."""

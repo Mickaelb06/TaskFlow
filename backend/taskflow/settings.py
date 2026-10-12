@@ -58,6 +58,14 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework_simplejwt.authentication.JWTAuthentication"],
     "EXCEPTION_HANDLER": "taskflow.exceptions.handler",
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
+    # Limites de débit par portée (`throttle_scope` sur la vue). Derrière un proxy, régler NUM_PROXIES.
+    "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.ScopedRateThrottle"],
+    "DEFAULT_THROTTLE_RATES": {
+        "login": os.environ.get("LOGIN_RATE", "10/min"),        # essais de connexion par adresse IP (force brute)
+        "register": os.environ.get("REGISTER_RATE", "10/hour"),  # créations de compte par adresse IP
+        "chat": os.environ.get("CHAT_RATE", "60/min"),          # messages envoyés par utilisateur
+        "account": os.environ.get("ACCOUNT_RATE", "10/hour"),   # export / suppression de son compte
+    },
 }
 
 SIMPLE_JWT = {"UPDATE_LAST_LOGIN": True}  # alimente « dernière connexion » dans l'administration
