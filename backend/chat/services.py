@@ -9,13 +9,30 @@ from django.utils import timezone
 
 from projects.models import Membership, Project
 
-from .models import Conversation, Message, Notification, ReadMark
+from tasks.models import Task
+
+from .models import Attachment, Conversation, Message, Notification, ReadMark, Reaction
 
 User = get_user_model()
 MAX_LENGTH = 2000
 PAGE = 50
 EVERYONE = ("tous", "all")
 # « @nom » : pas collé à un mot (évite les emails), accepte nom.prenom, nom-x ; la ponctuation finale est exclue
+REACTIONS = ("👍", "❤️", "😂", "🎉", "👀", "✅")
+TASK_REF = re.compile(r"(?<![\w&])#(\d{1,9})\b")  # « #12 » désigne la tâche 12 du projet du fil
+MAX_FILES, MAX_FILE_SIZE = 3, 5 * 1024 * 1024
+# extension → (type MIME imposé, vérification du contenu). Le type envoyé par le navigateur n'est jamais cru ;
+# pas de SVG ni de HTML (scripts), pas d'exécutables.
+FILE_TYPES = {
+    ".png": ("image/png", lambda b: b.startswith(b"\x89PNG")), ".jpg": ("image/jpeg", lambda b: b.startswith(b"\xff\xd8\xff")),
+    ".jpeg": ("image/jpeg", lambda b: b.startswith(b"\xff\xd8\xff")), ".gif": ("image/gif", lambda b: b.startswith(b"GIF8")),
+    ".webp": ("image/webp", lambda b: b[:4] == b"RIFF" and b[8:12] == b"WEBP"), ".pdf": ("application/pdf", lambda b: b.startswith(b"%PDF-")),
+    ".txt": ("text/plain; charset=utf-8", lambda b: b"\x00" not in b), ".csv": ("text/csv; charset=utf-8", lambda b: b"\x00" not in b),
+    ".docx": ("application/vnd.openxmlformats-officedocument.wordprocessingml.document", lambda b: b.startswith(b"PK\x03\x04")),
+    ".xlsx": ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", lambda b: b.startswith(b"PK\x03\x04")),
+    ".pptx": ("application/vnd.openxmlformats-officedocument.presentationml.presentation", lambda b: b.startswith(b"PK\x03\x04")),
+    ".odt": ("application/vnd.oasis.opendocument.text", lambda b: b.startswith(b"PK\x03\x04")),
+}
 MENTION = re.compile(r"(?<![\w@])@(\w+(?:[.\-+]\w+)*)")
 
 
@@ -89,26 +106,115 @@ def parse_mentions(content, people, author):
     return list(found.values()), everyone
 
 
+def _check_file(f):
+    name = (f.name or "fichier").replace("\\", "/").rsplit("/", 1)[-1][:200]
+    ext = "." + name.rsplit(".", 1)[-1].lower() if "." in name else ""
+    if ext not in FILE_TYPES:
+        raise ValidationError(f"Type de fichier non accepté : « {name} » (images, PDF, texte, CSV, documents Office).")
+    if f.size > MAX_FILE_SIZE:
+        raise ValidationError(f"« {name} » dépasse {MAX_FILE_SIZE // (1024 * 1024)} Mo.")
+    head = f.read(16)
+    f.seek(0)
+    sniff = FILE_TYPES[ext][1]
+    if f.size == 0 or not sniff(head if ext not in (".txt", ".csv") else f.read(65536)):
+        f.seek(0)
+        raise ValidationError(f"Le contenu de « {name} » ne correspond pas à son type.")
+    f.seek(0)
+    return name, ext
+
+
 @transaction.atomic
-def post_message(user, conv, content):
+def post_message(user, conv, content, reply_to=None, files=()):
     if not can_write(user, conv):
         raise PermissionDenied("Vous ne pouvez pas écrire dans cette conversation.")
     content = (content or "").strip()
-    if not content:
+    files = list(files)
+    if not content and not files:
         raise ValidationError("Le message est vide.")
     if len(content) > MAX_LENGTH:
         raise ValidationError(f"Message trop long ({MAX_LENGTH} caractères au plus).")
-    msg = Message.objects.create(conversation=conv, author=user, content=content)
-    people = participants(conv)
-    mentioned, everyone = parse_mentions(content, people, user)
-    if mentioned:
-        msg.mentions.set(mentioned)
-        Notification.objects.bulk_create([Notification(user=u, message=msg) for u in mentioned])
-    if everyone:
-        Message.objects.filter(pk=msg.pk).update(mentions_all=True)
-        msg.mentions_all = True
+    if len(files) > MAX_FILES:
+        raise ValidationError(f"{MAX_FILES} fichiers au plus par message.")
+    checked = [(f, *_check_file(f)) for f in files]
+    parent = None
+    if reply_to:
+        parent = Message.objects.filter(pk=reply_to, conversation=conv).first()
+        if parent is None:
+            raise ValidationError("Le message cité n'existe pas dans cette conversation.")
+    msg = Message.objects.create(conversation=conv, author=user, content=content, reply_to=parent)
+    for f, name, ext in checked:
+        Attachment.objects.create(message=msg, file=f, name=name, content_type=FILE_TYPES[ext][0], size=f.size)
+    _notify(msg, user, conv, already=())
     mark_read(user, conv, msg.pk)
     return msg
+
+
+def _notify(msg, author, conv, already):
+    """Crée les notifications des personnes mentionnées qui ne l'étaient pas encore."""
+    people = participants(conv)
+    mentioned, everyone = parse_mentions(msg.content, people, author)
+    fresh = [u for u in mentioned if u.pk not in already]
+    if mentioned:
+        msg.mentions.set(mentioned)
+    if fresh:
+        Notification.objects.bulk_create([Notification(user=u, message=msg) for u in fresh], ignore_conflicts=True)
+    if everyone != msg.mentions_all:
+        Message.objects.filter(pk=msg.pk).update(mentions_all=everyone)
+        msg.mentions_all = everyone
+
+
+@transaction.atomic
+def edit_message(user, msg, content):
+    """Seul l'auteur modifie son message ; les nouvelles mentions notifient, les anciennes ne sont pas renotifiées."""
+    conv = msg.conversation
+    if msg.author_id != user.pk or not can_write(user, conv):
+        raise PermissionDenied("Vous ne pouvez modifier que vos propres messages.")
+    content = (content or "").strip()
+    if not content and not msg.attachments.exists():
+        raise ValidationError("Le message est vide.")
+    if len(content) > MAX_LENGTH:
+        raise ValidationError(f"Message trop long ({MAX_LENGTH} caractères au plus).")
+    before = set(msg.mentions.values_list("pk", flat=True))
+    msg.content = content
+    msg.edited_at = timezone.now()
+    msg.save(update_fields=["content", "edited_at"])
+    _notify(msg, user, conv, already=before)
+    return msg
+
+
+def toggle_reaction(user, msg, emoji):
+    if emoji not in REACTIONS:
+        raise ValidationError("Réaction non proposée.")
+    if not can_write(user, msg.conversation):
+        raise PermissionDenied("Vous ne pouvez pas réagir dans cette conversation.")
+    existing = Reaction.objects.filter(message=msg, user=user, emoji=emoji)
+    if existing.exists():
+        existing.delete()
+    else:
+        Reaction.objects.create(message=msg, user=user, emoji=emoji)
+
+
+def task_refs(conv, messages):
+    """{id du message: [tâches citées avec #id]} — uniquement des tâches du projet du fil (jamais d'un autre projet)."""
+    if conv.kind != Conversation.Kind.PROJECT:
+        return {}
+    wanted = {m.pk: {int(n) for n in TASK_REF.findall(m.content)} for m in messages}
+    ids = set().union(*wanted.values()) if wanted else set()
+    if not ids:
+        return {}
+    found = {t.pk: t for t in Task.objects.filter(project=conv.project, pk__in=ids)}
+    return {mid: [found[i] for i in sorted(refs) if i in found] for mid, refs in wanted.items() if refs}
+
+
+def search(user, query, conversation=None, limit=30):
+    """Messages contenant `query` dans les conversations que je peux lire, du plus récent au plus ancien."""
+    query = (query or "").strip()
+    if len(query) < 2:
+        raise ValidationError("Saisissez au moins 2 caractères.")
+    convs = {c.pk: c for c in my_conversations(user)}
+    ids = [conversation] if conversation and conversation in convs else list(convs)
+    qs = Message.objects.filter(conversation_id__in=ids, content__icontains=query).select_related("author").order_by("-id")[:limit]
+    return [(m, convs[m.conversation_id]) for m in qs]
 
 
 def delete_message(user, msg):
@@ -124,11 +230,16 @@ def can_delete(user, msg):
     return msg.author_id == user.pk or (conv.kind == Conversation.Kind.PROJECT and _role(user, conv) == Membership.Role.OWNER)
 
 
-def history(conv, after=None, before=None, limit=PAGE):
+def history(conv, after=None, before=None, limit=PAGE, around=None):
     """Messages d'un fil : les plus récents par défaut ; `after` = seulement les nouveaux (rafraîchissement),
     `before` = page précédente. Toujours renvoyés du plus ancien au plus récent."""
     qs = conv.messages.select_related("author").prefetch_related("mentions")
     limit = max(1, min(int(limit or PAGE), 100))
+    if around:  # résultat de recherche : le message visé, un peu avant et un peu après
+        around = int(around)
+        older = list(qs.filter(pk__lte=around).order_by("-id")[:21])
+        newer = list(qs.filter(pk__gt=around).order_by("id")[:30])
+        return older[:20][::-1] + newer, len(older) > 20
     if after:
         return list(qs.filter(pk__gt=int(after))[:200]), False
     if before:

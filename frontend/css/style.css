@@ -781,3 +781,55 @@ dialog::backdrop { background: rgba(40, 24, 12, 0.5); backdrop-filter: blur(3px)
 .account-head .avatar { width: 38px; height: 38px; font-size: 13px; }
 .modal-card h3 { font-size: 13px; margin: 16px 0 4px; }
 .danger-title { color: var(--danger); }
+
+
+/* messagerie : outils de message, réponses, réactions, pièces jointes */
+.chat-search { display: flex; align-items: center; gap: 8px; padding: 6px 10px; margin: 0 0 6px; border: 1px solid var(--border); border-radius: 10px; color: var(--muted); background: var(--bg); }
+.chat-search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.chat-search input { border: 0; background: none; padding: 0; flex: 1; min-width: 0; outline: none; color: var(--text); }
+.chat-search input::-webkit-search-cancel-button { cursor: pointer; }
+.crow.hit .crow-main small { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.cmsg { position: relative; }
+.cmsg-tools { position: absolute; right: 8px; top: -14px; display: none; gap: 2px; padding: 2px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow-sm); z-index: 3; }
+.cmsg:hover .cmsg-tools, .cmsg:focus-within .cmsg-tools { display: flex; }
+.cmsg-tools .icon-btn { height: 26px; min-width: 26px; }
+.cmsg-tools .icon-btn.danger:hover { color: var(--danger); }
+.cmsg.flash { animation: flash 1.6s ease; }
+@keyframes flash { 0%, 60% { background: color-mix(in srgb, var(--amber) 35%, transparent); } 100% { background: transparent; } }
+.cmsg-quote { display: flex; flex-direction: column; text-align: left; padding: 2px 10px; margin: 2px 0 4px; border-left: 3px solid var(--accent); border-radius: 0 6px 6px 0; background: var(--hover); max-width: 560px; }
+.cmsg-quote b { font-size: 12px; color: var(--accent); }
+.cmsg-quote span { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.edited { font-size: 11px; color: var(--muted); }
+.cmsg-edit textarea { width: 100%; resize: vertical; padding: 8px 10px; border-radius: 10px; }
+.cmsg-edit .row { margin-top: 6px; flex-wrap: wrap; }
+.reacts { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; position: relative; }
+.react { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg); font-size: 13px; }
+.react span { font-size: 12px; color: var(--muted); }
+.react:hover:not(:disabled) { border-color: var(--accent); }
+.react.mine { background: color-mix(in srgb, var(--accent) 16%, var(--bg)); border-color: var(--accent); }
+.react.mine span { color: var(--accent); font-weight: 600; }
+.react-picker { display: inline-flex; gap: 2px; padding: 3px; background: var(--bg); border: 1px solid var(--border); border-radius: 999px; box-shadow: var(--shadow); animation: pop 0.14s var(--ease); }
+.react-picker button { font-size: 17px; width: 30px; height: 30px; border-radius: 50%; }
+.react-picker button:hover { background: var(--hover); transform: scale(1.18); }
+.atts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.att.img { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--hover); max-width: 280px; }
+.att.img img { display: block; max-width: 280px; max-height: 200px; min-width: 80px; min-height: 60px; object-fit: cover; }
+.att.file { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); max-width: 320px; }
+.att.file:hover { border-color: var(--accent); }
+.att-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.att small { color: var(--muted); flex: none; }
+.tchips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.tchip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 8px; font-size: 12.5px; font-weight: 500; border: 1px solid color-mix(in srgb, var(--teal) 45%, var(--border)); background: color-mix(in srgb, var(--teal) 10%, var(--bg)); color: var(--text); max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tchip.done { text-decoration: line-through; opacity: 0.7; }
+.tchip:hover { border-color: var(--teal); }
+.composer { flex-wrap: wrap; }
+.composer-row { display: flex; align-items: flex-end; gap: 8px; flex: 1 1 100%; }
+.composer-row textarea { flex: 1; }
+.attach { align-self: flex-end; height: 38px; min-width: 38px; }
+.reply-bar { flex: 1 1 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; border-left: 3px solid var(--accent); background: var(--hover); border-radius: 0 8px 8px 0; font-size: 12.5px; }
+.reply-bar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-chips { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 6px; }
+.file-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 10px; border: 1px solid var(--border); border-radius: 999px; font-size: 12.5px; background: var(--bg); }
+.file-chip small { color: var(--muted); }
+.tnum { font-variant-numeric: tabular-nums; color: var(--teal); font-weight: 600; min-width: 34px; }
+.mention-item .ellipsis { max-width: 320px; }

@@ -56,9 +56,15 @@ const alice = { id: 1, username: "alice" };
 const carol = { id: 3, username: "carol" };
 const conv = (id, o) => ({ id, kind: "project", title: "x", project: null, other: null, solo: false, can_write: true, members: [alice, bob, carol], unread: 0, last: null, ...o });
 const msg = (id, author, content, o = {}) => ({ id, author, content, created_at: dt(0), mentions: [], mentions_all: false, can_delete: false, ...o });
+const RICH = msg(3, bob, "Voir #7 et le devis", { can_edit: false, edited: true,
+  reply_to: { id: 2, author: "alice", excerpt: "Bien reçu merci" },
+  reactions: [{ emoji: "👍", count: 2, mine: true, users: ["alice", "bob"] }, { emoji: "🎉", count: 1, mine: false, users: ["bob"] }],
+  attachments: [{ id: 5, name: "maquette<1>.png", size: 20480, content_type: "image/png", image: true }, { id: 6, name: "devis.pdf", size: 3 * 1048576, content_type: "application/pdf", image: false }],
+  tasks: [{ id: 7, title: "Maquettes <b>", status: "doing", project: 7 }] });
 const THREAD = [
   msg(1, bob, "Salut @alice <script>boom()</script> @inconnu @tous", { mentions: ["alice"], mentions_all: true }),
-  msg(2, alice, "Bien reçu\nmerci @bob", { can_delete: true, mentions: ["bob"] }),
+  msg(2, alice, "Bien reçu\nmerci @bob", { can_delete: true, can_edit: true, mentions: ["bob"] }),
+  RICH,
 ];
 
 const routes = {
@@ -73,6 +79,7 @@ const routes = {
   "/chat/conversations/11/messages/": { messages: [], has_more: false },
   "/chat/conversations/12/messages/": { messages: [msg(3, bob, "Hello")], has_more: false },
   "/chat/conversations/13/messages/": { messages: [], has_more: false },
+  "/chat/search/": [{ message: 2, conversation: 10, conversation_title: "Projet <b>A</b>", author: "alice", excerpt: "Bien reçu merci @bob", created_at: dt(0) }],
   "/chat/summary/": { unread_messages: 2, unread_notifications: 1 },
   "/chat/contacts/": [bob, carol],
   "/notifications/": [
@@ -171,6 +178,14 @@ globalThis.fetch = async (url, o = {}) => {
   if (method === "POST" && /^\/chat\/conversations\/\d+\/messages\/$/.test(path)) {
     const m = { id: 99, author: alice, content: JSON.parse(o.body).content, created_at: dt(0), mentions: [], mentions_all: false, can_delete: true };
     return { ok: true, status: 201, json: async () => m };
+  }
+  if (method === "PATCH" && /^\/chat\/messages\/\d+\/$/.test(path)) {
+    const m = { ...THREAD.find((x) => x.id === Number(path.split("/")[3])), ...JSON.parse(o.body), edited: true };
+    return { ok: true, status: 200, json: async () => m };
+  }
+  if (method === "POST" && /^\/chat\/messages\/\d+\/reactions\/$/.test(path)) {
+    const m = { ...THREAD.find((x) => x.id === Number(path.split("/")[3])), reactions: [{ emoji: JSON.parse(o.body).emoji, count: 1, mine: true, users: ["alice"] }] };
+    return { ok: true, status: 200, json: async () => m };
   }
   if (method !== "GET") return { ok: true, status: 200, json: async () => ({ moved: [], generated_password: "Zx9-secret-pw" }) };
   const data = routes[path] ?? routes[path.split("?")[0]];

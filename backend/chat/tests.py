@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from rest_framework.test import APITestCase
 
 from accounts import admin_services
@@ -14,6 +15,7 @@ PW = "pw-test-123"
 
 class ChatCase(APITestCase):
     def setUp(self):
+        cache.clear()  # la limite de débit (60 messages/min) est partagée entre les tests
         self.alice = User.objects.create_user("alice", password=PW)
         self.bob = User.objects.create_user("bob", password=PW)
         self.carol = User.objects.create_user("carol", password=PW)  # lectrice

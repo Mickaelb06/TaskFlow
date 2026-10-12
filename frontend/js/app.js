@@ -35,7 +35,7 @@ const state = {
   showCritical: auth.pref.get("critical") !== "0",
   filter: { group: "due", assignee: "", priority: "", showDone: false },
   summary: { unread_messages: 0, unread_notifications: 0 },
-  chat: { convs: [], current: null, messages: [], hasMore: false, drafts: {}, pick: { items: [], active: 0, start: 0 } },
+  chat: { convs: [], current: null, messages: [], hasMore: false, drafts: {}, pick: { items: [], active: 0, start: 0 }, editing: null, reactFor: null, replyTo: null, files: [], search: null, tasks: {} },
   notifs: [],
   mini: new Date(), // mois affiché dans le mini-calendrier de la barre latérale
   cal: { mode: ["day", "week", "month"].includes(auth.pref.get("calmode")) ? auth.pref.get("calmode") : "week", cursor: new Date(), data: null, project: "", mine: false },
@@ -520,7 +520,8 @@ const nearBottom = (el) => !el || el.scrollHeight - el.scrollTop - el.clientHeig
 function renderChat() {
   const c = state.chat;
   $("#view").innerHTML = CH.chatHtml({ convs: c.convs, current: c.current, messages: c.messages, hasMore: c.hasMore,
-    draft: c.drafts[c.current], meName: state.user.username, tz: myTz(), esc });
+    draft: c.drafts[c.current], meName: state.user.username, tz: myTz(), esc, editing: c.editing, reactFor: c.reactFor, replyTo: c.replyTo, files: c.files, search: c.search });
+  loadThumbs();
   const box = $("#chat-msgs");
   if (box) box.scrollTop = box.scrollHeight;
   const input = $("#chat-input");
@@ -529,7 +530,9 @@ function renderChat() {
 
 function paintChatList() {
   const el = $("#chat-convs");
-  if (el) el.innerHTML = CH.convListHtml({ convs: state.chat.convs, current: state.chat.current, tz: myTz(), esc });
+  if (!el) return;
+  const c = state.chat;
+  el.innerHTML = c.search ? CH.searchHtml(c.search.rows, c.search.q, esc) : CH.convListHtml({ convs: c.convs, current: c.current, tz: myTz(), esc });
 }
 
 function paintMessages(stick) {
@@ -537,8 +540,12 @@ function paintMessages(stick) {
   const conv = currentConv();
   if (!box || !conv) return;
   const keep = box.scrollHeight - box.scrollTop;
-  box.innerHTML = CH.messagesHtml({ messages: state.chat.messages, conv, meName: state.user.username, tz: myTz(), hasMore: state.chat.hasMore, esc });
+  const c = state.chat;
+  box.innerHTML = CH.messagesHtml({ messages: c.messages, conv, meName: state.user.username, tz: myTz(), hasMore: c.hasMore, esc,
+    editing: c.editing, reactFor: c.reactFor, canWrite: conv.can_write });
   box.scrollTop = stick ? box.scrollHeight : box.scrollHeight - keep;
+  loadThumbs();
+  if (c.editing) { const t = $("#edit-input"); t?.focus(); }
 }
 
 const unreadTotal = () => state.chat.convs.reduce((n, c) => n + c.unread, 0);
@@ -591,51 +598,138 @@ async function sendChat() {
   const input = $("#chat-input");
   const conv = currentConv();
   if (!input || !conv) return;
+  const c = state.chat;
   const text = input.value.trim();
-  if (!text) return;
-  const msg = await api.chatSend(conv.id, text);
+  if (!text && !c.files.length) return;
+  let msg;
+  if (c.files.length) {
+    const form = new FormData();
+    form.append("content", text);
+    if (c.replyTo) form.append("reply_to", c.replyTo.id);
+    c.files.forEach((f) => form.append("files", f));
+    msg = await api.chatSendForm(conv.id, form);
+  } else {
+    msg = await api.chatSend(conv.id, text, c.replyTo?.id);
+  }
   input.value = "";
   input.style.height = "auto";
-  delete state.chat.drafts[conv.id];
+  delete c.drafts[conv.id];
+  c.replyTo = null;
+  c.files = [];
+  paintComposerExtras();
   hidePick();
-  state.chat.messages.push(msg);
-  conv.last = { author: state.user.username, excerpt: text.replace(/\s+/g, " ").slice(0, 90), created_at: msg.created_at };
+  c.messages.push(msg);
+  conv.last = { author: state.user.username, excerpt: (text || "Pièce jointe").replace(/\s+/g, " ").slice(0, 90), created_at: msg.created_at };
   conv.unread = 0;
-  state.chat.convs.sort((a, b) => (b.last ? new Date(b.last.created_at) : 0) - (a.last ? new Date(a.last.created_at) : 0));
+  c.convs.sort((a, b) => (b.last ? new Date(b.last.created_at) : 0) - (a.last ? new Date(a.last.created_at) : 0));
   paintMessages(true);
   paintChatList();
   input.focus();
 }
 
-/* --- @mentions : liste de propositions sous le champ de saisie */
+/** Bandeau « réponse à… » et pastilles des fichiers en attente, sans toucher au champ de saisie. */
+function paintComposerExtras() {
+  const c = state.chat;
+  const bar = $("#reply-bar");
+  if (bar) { bar.hidden = !c.replyTo; bar.innerHTML = c.replyTo ? CH.replyBarHtml(c.replyTo, esc) : ""; }
+  const chips = $("#file-chips");
+  if (chips) { chips.hidden = !c.files.length; chips.innerHTML = CH.fileChipsHtml(c.files, esc); }
+}
+
+/** Miniatures des images jointes : chargées avec le jeton, une seule fois chacune. */
+const thumbs = new Map();
+function loadThumbs() {
+  document.querySelectorAll("img[data-att]").forEach((img) => {
+    const id = img.dataset.att;
+    if (thumbs.has(id)) { if (thumbs.get(id)) img.src = thumbs.get(id); return; }
+    thumbs.set(id, null);
+    api.attachmentUrl(id).then((url) => { thumbs.set(id, url); document.querySelectorAll(`img[data-att="${id}"]`).forEach((n) => (n.src = url)); }).catch(() => thumbs.delete(id));
+  });
+}
+
+const msgById = (id) => state.chat.messages.find((m) => m.id === Number(id));
+function replaceMessage(updated) {
+  state.chat.messages = state.chat.messages.map((m) => (m.id === updated.id ? updated : m));
+}
+function flash(id) {
+  const el = document.querySelector(`[data-msg="${id}"]`);
+  if (!el) return false;
+  el.scrollIntoView?.({ block: "center" });
+  el.classList.add("flash");
+  setTimeout(() => el.classList.remove("flash"), 1600);
+  return true;
+}
+
+/* --- @mentions et #tâches : liste de propositions sous le champ de saisie */
 function hidePick() {
   state.chat.pick = { items: [], active: 0, start: 0 };
   const pop = $("#mention-pop");
   if (pop) { pop.hidden = true; pop.innerHTML = ""; }
 }
-function showPick() {
+async function projectTasks(conv) {
+  if (conv.kind !== "project") return [];
+  if (!state.chat.tasks[conv.project]) state.chat.tasks[conv.project] = await api.tasks(conv.project).catch(() => []);
+  return state.chat.tasks[conv.project];
+}
+async function showPick() {
   const t = $("#chat-input");
   const conv = currentConv();
   const pop = $("#mention-pop");
   if (!t || !conv || !pop) return;
-  const at = CH.mentionAt(t.value, t.selectionStart ?? t.value.length);
-  const items = at ? CH.suggestions(conv, at.query, state.user.username) : [];
+  const caret = t.selectionStart ?? t.value.length;
+  const at = CH.mentionAt(t.value, caret);
+  const hash = at ? null : CH.hashAt(t.value, caret);
+  let items = [], start = 0, prefix = "@";
+  if (at) { items = CH.suggestions(conv, at.query, state.user.username); start = at.start; }
+  else if (hash) { items = CH.taskSuggestions(await projectTasks(conv), hash.query); start = hash.start; prefix = "#"; }
   if (!items.length) return hidePick();
   const active = Math.min(state.chat.pick.active, items.length - 1);
-  state.chat.pick = { items, active, start: at.start };
+  state.chat.pick = { items, active, start, prefix };
   pop.innerHTML = CH.popupHtml(items, active, esc);
   pop.hidden = false;
 }
 function choosePick(name) {
   const t = $("#chat-input");
   if (!t) return;
-  const r = CH.applyMention(t.value, t.selectionStart ?? t.value.length, state.chat.pick.start, name);
+  const r = CH.applyMention(t.value, t.selectionStart ?? t.value.length, state.chat.pick.start, name, state.chat.pick.prefix || "@");
   t.value = r.text;
   t.setSelectionRange?.(r.caret, r.caret);
   state.chat.drafts[state.chat.current] = r.text;
   hidePick();
   t.focus();
 }
+
+/* recherche dans les messages (attente de 300 ms après la dernière frappe) */
+let searchTimer = 0;
+function clearSearch() {
+  clearTimeout(searchTimer);
+  if (state.chat.search) { state.chat.search = null; paintChatList(); }
+}
+document.addEventListener("input", (e) => {
+  if (e.target.id !== "chat-search") return;
+  const q = e.target.value.trim();
+  clearTimeout(searchTimer);
+  if (q.length < 2) return clearSearch();
+  searchTimer = setTimeout(guard(async () => {
+    const rows = await api.chatSearch(q);
+    if (e.target.value.trim() !== q) return; // la saisie a changé entre-temps
+    state.chat.search = { q, rows };
+    paintChatList();
+  }), 300);
+});
+
+/* fichiers choisis avec le trombone */
+document.addEventListener("change", (e) => {
+  if (e.target.id !== "chat-file") return;
+  const c = state.chat;
+  for (const f of [...e.target.files]) {
+    if (c.files.length >= 3) { toast("3 fichiers au plus par message."); break; }
+    if (f.size > 5 * 1024 * 1024) { toast(`« ${f.name} » dépasse 5 Mo.`); continue; }
+    c.files.push(f);
+  }
+  e.target.value = "";
+  paintComposerExtras();
+});
 
 document.addEventListener("input", (e) => {
   if (e.target.id !== "chat-input") return;
@@ -649,7 +743,14 @@ document.addEventListener("input", (e) => {
 
 /* Les touches du champ de saisie passent avant les raccourcis globaux */
 document.addEventListener("keydown", guard(async (e) => {
+  if (e.target.id === "edit-input") {
+    if (e.key === "Escape") { e.preventDefault(); return handlers["cancel-edit"](); }
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); return handlers["save-edit"]({ dataset: { id: state.chat.editing } }); }
+    return;
+  }
+  if (e.target.id === "chat-search" && e.key === "Escape") { e.target.value = ""; return clearSearch(); }
   if (e.target.id !== "chat-input") return;
+  if (e.key === "Escape" && state.chat.replyTo && !state.chat.pick.items.length) { state.chat.replyTo = null; return paintComposerExtras(); }
   const pick = state.chat.pick;
   if (pick.items.length) {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -947,6 +1048,61 @@ const handlers = {
       await openMessages(conv.id);
     });
   },
+  attach: () => $("#chat-file")?.click(),
+  "remove-file": (el) => { state.chat.files.splice(Number(el.dataset.i), 1); paintComposerExtras(); },
+  reply: (el) => {
+    state.chat.replyTo = msgById(el.dataset.id);
+    paintComposerExtras();
+    $("#chat-input")?.focus();
+  },
+  "cancel-reply": () => { state.chat.replyTo = null; paintComposerExtras(); },
+  "edit-msg": (el) => { state.chat.editing = Number(el.dataset.id); state.chat.reactFor = null; paintMessages(false); },
+  "cancel-edit": () => { state.chat.editing = null; paintMessages(false); },
+  "save-edit": async (el) => {
+    const text = $("#edit-input")?.value ?? "";
+    const updated = await api.chatEdit(Number(el.dataset.id), text);
+    state.chat.editing = null;
+    replaceMessage(updated);
+    paintMessages(false);
+  },
+  "react-pop": (el) => {
+    const id = Number(el.dataset.id);
+    state.chat.reactFor = state.chat.reactFor === id ? null : id;
+    paintMessages(false);
+  },
+  react: async (el) => {
+    const updated = await api.chatReact(Number(el.dataset.id), el.dataset.emoji);
+    state.chat.reactFor = null;
+    replaceMessage(updated);
+    paintMessages(false);
+  },
+  "goto-msg": (el) => { if (!flash(el.dataset.id)) toast("Ce message est plus haut dans l'historique : chargez les messages plus anciens."); },
+  "open-hit": async (el) => {
+    const id = Number(el.dataset.msg);
+    const conv = Number(el.dataset.conv);
+    state.chat.search = null;
+    state.chat.current = conv;
+    const r = await api.chatMessages(conv, { around: id });
+    state.chat.messages = r.messages;
+    state.chat.hasMore = r.has_more;
+    await api.chatRead(conv);
+    const c = state.chat.convs.find((x) => x.id === conv);
+    if (c) c.unread = 0;
+    render();
+    flash(id);
+  },
+  "open-att": async (el) => {
+    const win = window.open("", "_blank");
+    try { const url = await api.attachmentUrl(el.dataset.id); if (win) win.location.href = url; } catch (err) { win?.close(); throw err; }
+  },
+  "download-att": async (el) => {
+    const url = await api.attachmentUrl(el.dataset.id);
+    const a = Object.assign(document.createElement("a"), { href: url, download: el.dataset.name || "fichier" });
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  },
   "go-notifications": async () => {
     saveDraft();
     state.page = "notifications";
@@ -1012,7 +1168,7 @@ const handlers = {
   theme: () => applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"),
   logout: () => {
     auth.logout();
-    state.chat = { convs: [], current: null, messages: [], hasMore: false, drafts: {}, pick: { items: [], active: 0, start: 0 } };
+    state.chat = { convs: [], current: null, messages: [], hasMore: false, drafts: {}, pick: { items: [], active: 0, start: 0 }, editing: null, reactFor: null, replyTo: null, files: [], search: null, tasks: {} };
     state.summary = { unread_messages: 0, unread_notifications: 0 };
     showAuth();
   },

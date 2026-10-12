@@ -44,6 +44,28 @@ ok("email laissé tel quel", html("jean@bob.fr") === "jean@bob.fr");
 ok("ponctuation finale hors de la mention", html("@bob, merci. @alice!").includes("@bob</span>,") && html("@alice!").includes("@alice</span>!"));
 ok("nom piégé ne casse pas l'attribut", !html('@bob"onmouseover="x').includes('onmouseover="x'));
 
+print("# Citer une tâche avec #");
+ok("« # » en cours de frappe", same(CH.hashAt("voir #1", 7), { start: 5, query: "1" }) && same(CH.hashAt("#", 1), { start: 0, query: "" }) && same(CH.hashAt("voir #maq", 9), { start: 5, query: "maq" }));
+ok("pas de # dans un mot, une entité HTML ou après un espace", CH.hashAt("c#", 2) === null && CH.hashAt("&#12", 4) === null && CH.hashAt("# ", 2) === null && CH.hashAt("##", 2) === null);
+const tasks = [{ id: 7, title: "Maquettes" }, { id: 12, title: "Mentions légales" }, { id: 120, title: "Recette" }];
+ok("propositions par numéro ou par titre", same(CH.taskSuggestions(tasks, "1").map((t) => t.name), ["12", "120"]) && same(CH.taskSuggestions(tasks, "maq").map((t) => t.name), ["7"]) && CH.taskSuggestions(tasks, "").length === 3 && CH.taskSuggestions(null, "x").length === 0);
+r = CH.applyMention("voir #1", 7, 5, "12", "#");
+ok("insertion « #12 » avec espace", r.text === "voir #12 " && r.caret === 9);
+
+print("# Messages enrichis");
+const conv2 = { kind: "project", members: [{ username: "alice" }, { username: "bob" }] };
+const base = { id: 1, author: { id: 2, username: "bob" }, content: "Salut", created_at: "2026-10-12T08:00:00Z", mentions: [], mentions_all: false, can_delete: false, can_edit: false };
+const render = (m, o = {}) => CH.messagesHtml({ messages: [m], conv: conv2, meName: "alice", tz: "Europe/Paris", now: new Date("2026-10-12T12:00:00Z"), hasMore: false, esc, ...o });
+ok("réaction : compteur, « mine », liste des auteurs en infobulle", /react mine/.test(render({ ...base, reactions: [{ emoji: "👍", count: 2, mine: true, users: ["a", "b"] }] })) && render({ ...base, reactions: [{ emoji: "👍", count: 2, mine: true, users: ["a", "b"] }] }).includes('title="a, b"'));
+ok("lecteur : réactions désactivées, aucun outil d'écriture", render({ ...base, reactions: [{ emoji: "👍", count: 1, mine: false, users: ["x"] }] }, { canWrite: false }).includes("disabled") && !render(base, { canWrite: false }).includes("react-pop"));
+ok("lecteur : peut malgré tout supprimer ses propres messages seulement si l'API l'autorise", render({ ...base, can_delete: true }, { canWrite: false }).includes("delete-message") && !render(base, { canWrite: false }).includes("delete-message"));
+ok("modification en cours : zone de texte échappée", render({ ...base, content: "<b>x</b>" }, { editing: 1 }).includes("&lt;b&gt;x&lt;/b&gt;</textarea>"));
+ok("réponse : jamais groupée avec le message précédent", !/grouped/.test(CH.messagesHtml({ messages: [base, { ...base, id: 2, created_at: "2026-10-12T08:01:00Z", reply_to: { id: 1, author: "bob", excerpt: "Salut" } }], conv: conv2, meName: "alice", tz: "Europe/Paris", now: new Date("2026-10-12T12:00:00Z"), hasMore: false, esc })));
+ok("auteur de la citation supprimé : texte neutre", render({ ...base, reply_to: { id: 9, author: null, excerpt: "x" } }).includes("Utilisateur supprimé"));
+ok("message sans texte (fichier seul) : pas de bloc de texte vide", !render({ ...base, content: "", attachments: [{ id: 1, name: "a.pdf", size: 10, content_type: "application/pdf", image: false }] }).includes("cmsg-text"));
+ok("tailles de fichier", CH.sizeLabel(512) === "512 o" && CH.sizeLabel(2048) === "2 Ko" && CH.sizeLabel(5 * 1048576) === "5.0 Mo");
+ok("résultats de recherche : échappés, pluriel", CH.searchHtml([{ conversation: 1, message: 2, conversation_title: "<b>x</b>", author: null, excerpt: "<i>y</i>" }], "q", esc).includes("&lt;b&gt;x") && CH.searchHtml([], "<q>", esc).includes("&lt;q&gt;"));
+
 print("# Messages et fils");
 const author = { id: 1, username: "bob" };
 const mk = (id, a, t, at, o = {}) => ({ id, author: a, content: t, created_at: at, mentions: [], mentions_all: false, can_delete: false, ...o });

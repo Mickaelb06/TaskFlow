@@ -112,7 +112,25 @@ export const api = {
 
   chatConversations: () => request("/chat/conversations/"),
   chatMessages: (id, q = {}) => request(`/chat/conversations/${id}/messages/?${new URLSearchParams(q)}`),
-  chatSend: (id, content) => request(`/chat/conversations/${id}/messages/`, { method: "POST", body: { content } }),
+  chatSend: (id, content, reply_to = null) => request(`/chat/conversations/${id}/messages/`, { method: "POST", body: reply_to ? { content, reply_to } : { content } }),
+  chatEdit: (msgId, content) => request(`/chat/messages/${msgId}/`, { method: "PATCH", body: { content } }),
+  chatReact: (msgId, emoji) => request(`/chat/messages/${msgId}/reactions/`, { method: "POST", body: { emoji } }),
+  chatSearch: (q) => request(`/chat/search/?${new URLSearchParams({ q })}`),
+  /** Envoi avec pièces jointes : multipart (le navigateur fixe lui-même le Content-Type et sa frontière). */
+  async chatSendForm(id, form) {
+    const call = (token) => fetch(`${BASE}/chat/conversations/${id}/messages/`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
+    let res = await call(store.get("access"));
+    if (res.status === 401 && (await refresh())) res = await call(store.get("access"));
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(errorMessage(data, res.status));
+    return data;
+  },
+  /** Pièce jointe protégée : récupérée avec le jeton, exposée par une URL temporaire (blob). */
+  async attachmentUrl(id) {
+    const res = await fetch(`${BASE}/chat/attachments/${id}/`, { headers: { Authorization: `Bearer ${store.get("access")}` } });
+    if (!res.ok) throw new Error("Fichier indisponible.");
+    return URL.createObjectURL(await res.blob());
+  },
   chatRead: (id) => request(`/chat/conversations/${id}/read/`, { method: "POST" }),
   chatDelete: (msgId) => request(`/chat/messages/${msgId}/`, { method: "DELETE" }),
   chatDirect: (user) => request("/chat/direct/", { method: "POST", body: { user } }),

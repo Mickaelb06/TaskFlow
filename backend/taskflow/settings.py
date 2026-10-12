@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -73,8 +74,15 @@ SIMPLE_JWT = {"UPDATE_LAST_LOGIN": True}  # alimente « dernière connexion » d
 LANGUAGE_CODE = "fr-fr"
 TIME_ZONE = "Europe/Paris"
 USE_TZ = True
+MEDIA_ROOT = Path(os.environ.get("MEDIA_ROOT", BASE_DIR / "media"))  # pièces jointes de la messagerie (jamais servies directement)
+MEDIA_URL = None
+DATA_UPLOAD_MAX_MEMORY_SIZE = 16 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 6 * 1024 * 1024
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # CORS : nécessaire pour le front Flutter web ; en production, lister les origines autorisées
 CORS_ALLOW_ALL_ORIGINS = DEBUG
 CORS_ALLOWED_ORIGINS = [o for o in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",") if o]
+
+if "test" in sys.argv[:2]:  # tests : hachage rapide (PBKDF2 ralentit chaque création de compte) — jamais en production
+    PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
