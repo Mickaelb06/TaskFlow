@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TaskFlow · Menez vos projets sans perdre le fil</title>
+  <meta name="description" content="TaskFlow réunit planning Gantt, agenda à fuseaux horaires et messagerie d'équipe. Sachez où en est votre projet, prévenez les bonnes personnes, tenez vos dates.">
+  <meta name="theme-color" content="#8a5a36">
+  <link rel="icon" href="../icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="vitrine.css">
+  <style>
+    .hero h1 { max-width: 14em; }
+    .pains { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+    .pain { padding: 22px; border-radius: 14px; background: var(--card); border: 1px solid var(--border); }
+    .pain s { color: var(--muted); display: block; margin-bottom: 8px; }
+    .pain b { display: block; font-size: 1.05rem; line-height: 1.35; }
+    .steps { counter-reset: s; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; }
+    .step { position: relative; padding: 26px 22px 22px; background: var(--card); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-sm); }
+    .step::before { counter-increment: s; content: counter(s); position: absolute; top: -16px; left: 22px; width: 34px; height: 34px; border-radius: 50%; background: var(--grad); color: var(--on-accent); font-weight: 700; display: grid; place-items: center; box-shadow: 0 4px 12px rgba(138, 90, 54, 0.35); }
+    .step p { margin: 0; color: var(--muted); }
+    .big-cta { background: var(--grad); color: var(--on-accent); border-radius: 22px; padding: 56px 24px; text-align: center; box-shadow: var(--shadow); }
+    .big-cta h2 { color: var(--on-accent); }
+    .big-cta p { color: var(--on-accent); opacity: 0.88; max-width: 34em; margin: 0 auto 26px; font-size: 1.08rem; }
+    .big-cta .btn { background: var(--on-accent); color: var(--accent); border-color: transparent; }
+    .big-cta .btn.line { background: transparent; color: var(--on-accent); border-color: rgba(255, 250, 240, 0.55); }
+    .trust { display: flex; flex-wrap: wrap; gap: 10px 26px; justify-content: center; margin-top: 30px; color: var(--muted); font-size: 0.93rem; }
+    .trust span { display: inline-flex; align-items: center; gap: 7px; }
+    .trust svg { width: 17px; height: 17px; color: var(--ok); }
+  </style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="./"><span class="logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>TaskFlow</a>
+    <nav>
+      <a class="hide-s" href="#fonctions">Fonctions</a>
+      <a class="hide-s" href="#equipe">Équipes</a>
+      <a class="hide-s" href="#demarrer">Démarrer</a>
+      <a class="hide-s" href="#faq">Questions</a>
+      <a class="btn primary sm" href="../">Essayer gratuitement</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="wrap">
+      <span class="eyebrow reveal">Planning · Agenda · Messagerie</span>
+      <h1 class="reveal">Tenez vos dates. <em>Sans courir après personne.</em></h1>
+      <p class="lead reveal">TaskFlow voit venir les retards avant vous, remet votre planning d'aplomb en un clic et garde l'équipe au courant : tout ce qu'il faut pour mener un projet, dans un seul outil.</p>
+      <div class="cta reveal">
+        <a class="btn primary" href="../">Essayer gratuitement</a>
+        <a class="btn" href="#fonctions">Découvrir en 1 minute</a>
+      </div>
+      <div class="trust reveal">
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Prêt en deux minutes</span>
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Seul ou à plusieurs</span>
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Vos données exportables à tout moment</span>
+      </div>
+      <div class="shot reveal">
+        <div class="bar"><i></i><i></i><i></i></div>
+        <img src="img/accueil.png" alt="Tableau de bord TaskFlow : avancement, tâches du jour et projets en cours" width="1440" height="900">
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="center">
+        <h2>Vous reconnaissez peut-être ça</h2>
+        <p class="sub">Le travail se passe bien jusqu'au jour où l'information se perd entre un tableur, une messagerie et un agenda.</p>
+      </div>
+      <div class="pains">
+        <div class="pain"><s>« Où en est-on, exactement ? »</s><b>Un tableau de bord qui répond sans réunion.</b></div>
+        <div class="pain"><s>« Je l'ai appris la veille. »</s><b>Une alerte dès qu'une date est menacée.</b></div>
+        <div class="pain"><s>« 15 h chez toi, c'est quelle heure ici ? »</s><b>Deux fuseaux côte à côte, sans calcul.</b></div>
+        <div class="pain"><s>« Qui devait s'en occuper ? »</s><b>Chaque tâche a un responsable et un fil de discussion.</b></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="fonctions">
+    <div class="wrap">
+      <div class="center" style="margin-bottom:30px">
+        <h2>Tout ce qu'il faut pour avancer</h2>
+        <p class="sub">Quatre outils qui se parlent, au lieu de quatre onglets qui s'ignorent.</p>
+      </div>
+
+      <div class="feature">
+        <div class="txt">
+          <span class="tag">Planning</span>
+          <h2>Un planning qui se corrige tout seul</h2>
+          <p>Une tâche glisse ? Celles qui en dépendent suivent, et la nouvelle date de fin s'affiche aussitôt. Plus de planning obsolète dès le lundi matin.</p>
+          <ul>
+            <li>Chemin critique : repérez ce qui ne peut pas bouger sans repousser la livraison.</li>
+            <li>Alertes claires : en retard, menacée, sans responsable.</li>
+            <li>« Rattraper le retard » : replanifiez d'un seul geste.</li>
+          </ul>
+        </div>
+        <div class="shot"><img src="img/gantt.png" alt="Diagramme de Gantt avec dépendances et chemin critique" width="1440" height="900"></div>
+      </div>
+
+      <div class="feature flip">
+        <div class="txt">
+          <span class="tag">Agenda</span>
+          <h2>Un agenda qui ne vous fait plus calculer les heures</h2>
+          <p>Équipe à New York, client à Tokyo ? Affichez deux fuseaux côte à côte : la bonne heure pour tout le monde, même au changement d'heure.</p>
+          <ul>
+            <li>Déplacez, allongez ou créez un événement directement à la souris.</li>
+            <li>Réunions récurrentes et invitations à accepter ou refuser.</li>
+            <li>Vos tâches et vos rendez-vous dans une seule vue.</li>
+          </ul>
+        </div>
+        <div class="shot"><img src="img/calendrier.png" alt="Calendrier de la semaine avec événements récurrents et fuseau horaire" width="1440" height="900"></div>
+      </div>
+
+      <div class="feature">
+        <div class="txt">
+          <span class="tag">Messagerie</span>
+          <h2>Les discussions restent à côté du travail</h2>
+          <p>Un fil par projet. Écrivez <code>@lea</code> et elle est prévenue, <code>#12</code> et la tâche s'affiche. Fini de retrouver une décision perdue dans une boîte mail.</p>
+          <ul>
+            <li>Messages directs, réponses, réactions et pièces jointes.</li>
+            <li>Recherche dans tout l'historique.</li>
+            <li>Seul sur un projet, le fil devient votre bloc-notes.</li>
+          </ul>
+        </div>
+        <div class="shot"><img src="img/messagerie.png" alt="Messagerie avec conversations de projet et messages directs" width="1440" height="900"></div>
+      </div>
+
+      <div class="feature flip">
+        <div class="txt">
+          <span class="tag">Charge</span>
+          <h2>Voyez qui déborde avant que ça craque</h2>
+          <p>Le remplissage de chaque semaine, personne par personne, avec une proposition de réassignation quand quelqu'un dépasse 100 %.</p>
+          <p>Et la question que tout le monde se pose : « que se passe-t-il si cette tâche prend trois jours de retard ? » La réponse s'affiche tout de suite.</p>
+        </div>
+        <div class="shot"><img src="img/charge.png" alt="Charge de l'équipe par semaine et simulation de retard" width="1440" height="900"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="equipe">
+    <div class="wrap">
+      <div class="center">
+        <h2>Pour vous, pour votre équipe</h2>
+        <p class="sub">Le même outil, que vous soyez seul ou à dix. Rien à configurer pour commencer.</p>
+      </div>
+      <div class="grid g2">
+        <div class="card">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg></div>
+          <h3>Indépendant ou freelance</h3>
+          <p>Un chrono pour savoir où passe votre temps, des tâches qui se répètent toutes seules, des jours ouvrés si vous ne travaillez pas le week-end, et un agenda qui parle toutes les heures du monde.</p>
+        </div>
+        <div class="card">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><circle cx="17" cy="9" r="2.8"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M16 14.4c3 0 5.5 1.7 5.5 5"/></svg></div>
+          <h3>Équipe ou association</h3>
+          <p>Propriétaire, membre ou lecteur : chacun voit et fait ce qui le concerne. Les mentions préviennent la bonne personne par la cloche, par e-mail ou par une notification du navigateur.</p>
+        </div>
+      </div>
+      <div class="grid g3" style="margin-top:18px">
+        <div class="card"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="4"/></svg></div><h3>Démarrez vite</h3><p>Quatre modèles de projet prêts à l'emploi, et vos propres projets enregistrables comme modèles.</p></div>
+        <div class="card"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg></div><h3>Sachez où passe le temps</h3><p>Chrono intégré, saisie manuelle et rapport par tâche et par membre.</p></div>
+        <div class="card"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16v12H4z"/><path d="M4 7l8 6 8-6"/></svg></div><h3>Soyez prévenu, pas noyé</h3><p>Notifications dans l'application, e-mail pour l'essentiel et résumé du matin facultatif.</p></div>
+        <div class="card"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M11 18.5h2"/></svg></div><h3>Toujours sous la main</h3><p>Installez TaskFlow sur l'écran d'accueil de votre ordinateur ou de votre téléphone.</p></div>
+        <div class="card"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg></div><h3>Agréable à vivre</h3><p>Thèmes clair et sombre aux tons chauds, pensés pour ne pas fatiguer les yeux.</p></div>
+        <div class="card"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.4 8.4-8 9-4.6-.6-8-4-8-9V6z"/></svg></div><h3>Vos données, votre choix</h3><p>Exportez tout en un fichier ou supprimez votre compte quand vous voulez.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="demarrer">
+    <div class="wrap">
+      <div class="center">
+        <h2>Opérationnel en trois étapes</h2>
+        <p class="sub">Pas de formation, pas de réglages interminables.</p>
+      </div>
+      <div class="steps" style="margin-top:34px">
+        <div class="step"><h3>Créez un projet</h3><p>Partez de zéro ou d'un modèle : les tâches et leurs enchaînements sont déjà là.</p></div>
+        <div class="step"><h3>Invitez votre équipe</h3><p>Ajoutez les membres, donnez-leur un rôle, et chacun reçoit ses tâches.</p></div>
+        <div class="step"><h3>Suivez, sans relancer</h3><p>Le tableau de bord, les alertes et la messagerie font le reste.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq">
+    <div class="narrow">
+      <div class="center"><h2>Questions fréquentes</h2></div>
+      <details open><summary>Faut-il être plusieurs pour l'utiliser ?</summary><p>Non. Seul, vous avez vos projets, votre agenda, un chrono et un fil de notes. L'équipe s'ajoute quand vous en avez besoin.</p></details>
+      <details><summary>Mon planning se met-il vraiment à jour tout seul ?</summary><p>Oui, pour les dépendances : quand une tâche est repoussée, celles qui en dépendent sont décalées à sa suite, et la fin prévue est recalculée. Les tâches terminées ne bougent jamais.</p></details>
+      <details><summary>Je travaille avec des personnes dans d'autres fuseaux horaires.</summary><p>L'agenda enregistre chaque heure de façon universelle et l'affiche dans votre fuseau, avec un second fuseau en colonne si vous le souhaitez, changements d'heure compris.</p></details>
+      <details><summary>Puis-je récupérer mes données ?</summary><p>Oui, à tout moment : un export de tout ce qui vous concerne, et la suppression de votre compte depuis vos réglages.</p></details>
+      <details><summary>Comment l'essayer ?</summary><p>Ouvrez l'application. Un compte de démonstration (<code>demo</code> / <code>demo-taskflow-2026</code>) contient déjà un projet, des événements et des messages.</p></details>
+    </div>
+  </section>
+
+  <section style="padding-top:20px">
+    <div class="wrap">
+      <div class="big-cta">
+        <h2>Reprenez la main sur vos projets</h2>
+        <p>Rassemblez planning, agenda et discussions. Vous verrez dès la première journée où vous en êtes.</p>
+        <div class="cta">
+          <a class="btn" href="../">Essayer gratuitement</a>
+          <a class="btn line" href="#fonctions">Revoir les fonctions</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>TaskFlow · Menez vos projets sans perdre le fil.</span>
+    <span><a href="../">Ouvrir l'application</a></span>
+  </div>
+</footer>
+</body>
+</html>
