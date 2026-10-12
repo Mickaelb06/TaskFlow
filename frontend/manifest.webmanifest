@@ -3,7 +3,7 @@
   "short_name": "TaskFlow",
   "description": "Gestion de projet et de tâches, seul ou en équipe : Gantt, calendrier, messagerie.",
   "lang": "fr",
-  "start_url": "/",
+  "start_url": "/app",
   "scope": "/",
   "display": "standalone",
   "background_color": "#fbf6ec",
