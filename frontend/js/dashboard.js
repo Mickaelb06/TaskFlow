@@ -10,6 +10,8 @@ const HEALTH = {
 const ROLE = { owner: "Propriétaire", member: "Membre", viewer: "Lecteur" };
 const day = (iso) => D.fmt(D.parse(iso), { day: "numeric", month: "short" });
 const plural = (n, one, many) => `${n} ${n > 1 ? many : one}`;
+export const fmtMin = (m) => (m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ` ${String(m % 60).padStart(2, "0")}` : ""}` : `${m} min`);
+
 const card = (title, body, cls = "", extra = "") =>
   `<section class="card ${cls}"><header><h3>${title}</h3>${extra}</header>${body}</section>`;
 const kpi = (label, value, sub, valueCls = "") =>
@@ -79,7 +81,7 @@ export function homeHtml({ data, user, esc, avatar }) {
 }
 
 /* ------------------------------------------------------------------ projet */
-export function projectDashHtml({ insights, project, esc, avatar }) {
+export function projectDashHtml({ insights, project, esc, avatar, time = null }) {
   if (!insights) return '<div class="empty"><p class="muted">Indicateurs indisponibles.</p></div>';
   const i = insights;
   const s = i.stats;
@@ -118,6 +120,11 @@ export function projectDashHtml({ insights, project, esc, avatar }) {
       <span class="muted small">${t.who ? esc(t.who) + " · " : ""}${day(t.at.slice(0, 10))}</span></div>`).join("")
     || '<p class="muted pad">Aucune tâche terminée pour l\'instant.</p>';
 
+  const top = Math.max(1, ...(time?.by_member || []).map((r) => r.minutes));
+  const timeBody = time && time.total
+    ? `<p class="big-num">${fmtMin(time.total)}</p>${time.by_member.map((r) => `<div class="tbar"><span class="ellipsis">${esc(r.user)}</span><div class="meter"><i style="width:${(r.minutes / top) * 100}%"></i></div><b>${fmtMin(r.minutes)}</b></div>`).join("")}
+       <h4 class="sub">Tâches les plus longues</h4>${time.by_task.slice(0, 4).map((t) => `<div class="drow"><span class="ellipsis grow">${esc(t.title)}</span><span class="muted small">${fmtMin(t.minutes)}</span></div>`).join("")}`
+    : '<p class="muted pad">Aucun temps saisi. Démarrez un chrono depuis une tâche (panneau de droite).</p>';
   const v = s.velocity;
   return `<div class="dash">
     <div class="kpis dash-kpis five">
@@ -134,5 +141,6 @@ export function projectDashHtml({ insights, project, esc, avatar }) {
       ${card("Échéances de la semaine", `<div class="drows">${due}</div>`, "span-6")}
       ${card("Risques", `<div class="risks-list">${risks}</div>`, "span-6")}
       ${card("Terminées récemment", `<div class="drows">${recent}</div>`, "span-6")}
+      ${card("Temps passé (30 jours)", timeBody, "span-6")}
     </div></div>`;
 }

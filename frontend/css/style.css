@@ -865,3 +865,32 @@ div.block { margin-top: 12px; }
 .notif-open { text-align: left; display: flex; flex-direction: column; border-radius: 6px; }
 .notif-open:hover { color: var(--accent); }
 .notif-open small { color: var(--muted); }
+
+
+/* charge de l'équipe et simulation */
+.wl { display: flex; flex-direction: column; gap: 14px; padding: 16px; }
+.wl .card header { align-items: center; }
+.wl-grid { display: grid; grid-template-columns: minmax(120px, 180px) repeat(var(--cols), minmax(70px, 1fr)); gap: 6px; margin: 12px 0 8px; align-items: stretch; }
+.wl-head { font-size: 12px; color: var(--muted); text-align: center; padding-bottom: 2px; }
+.wl-who { display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 500; }
+.wl-cell { display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 10px; padding: 8px 4px; min-height: 52px; background: var(--hover); }
+.wl-cell small { color: var(--muted); font-size: 11px; }
+.lv-none { color: var(--muted); }
+.wl-cell.lv-free, .wl-legend .lv-free { background: color-mix(in srgb, var(--teal) 14%, var(--bg)); }
+.wl-cell.lv-ok, .wl-legend .lv-ok { background: color-mix(in srgb, var(--ok) 22%, var(--bg)); }
+.wl-cell.lv-high, .wl-legend .lv-high { background: color-mix(in srgb, var(--amber) 38%, var(--bg)); }
+.wl-cell.lv-over, .wl-legend .lv-over { background: color-mix(in srgb, var(--today) 38%, var(--bg)); }
+.wl-cell.lv-over b { color: var(--today); }
+.wl-legend { display: flex; gap: 8px; font-size: 11px; margin-bottom: 8px; }
+.wl-legend span { padding: 2px 10px; border-radius: 999px; }
+h3.sub { margin: 14px 0 6px; font-size: 13px; }
+.sugg { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 6px; }
+.sugg-ico { color: var(--accent); }
+.sim { display: flex; flex-direction: column; }
+.sim-row { display: flex; align-items: center; gap: 12px; padding: 7px 0; border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent); }
+.sim-row:last-child { border-bottom: 0; }
+.sim-bar { width: 160px; height: 8px; border-radius: 4px; background: var(--hover); overflow: hidden; flex: none; }
+.sim-bar i { display: block; height: 100%; border-radius: 4px; background: var(--ok); }
+.sim-bar i.hot { background: var(--today); }
+.sim-val { width: 90px; text-align: right; font-weight: 600; flex: none; }
+.sim-pushed { width: 130px; text-align: right; flex: none; }

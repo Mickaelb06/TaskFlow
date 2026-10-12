@@ -2,8 +2,9 @@ import { api, auth } from "./api.js";
 import * as D from "./dates.js";
 import { ganttHtml } from "./gantt.js";
 import { teamHtml } from "./team.js";
-import { homeHtml, projectDashHtml } from "./dashboard.js";
+import { homeHtml, projectDashHtml, fmtMin } from "./dashboard.js";
 import { adminHtml, createAdmin } from "./admin.js";
+import { workloadHtml, DELAY_OPTIONS } from "./workload.js";
 import * as CAL from "./calendar.js";
 import * as TZ from "./tz.js";
 import * as CH from "./chat.js";
@@ -26,7 +27,7 @@ const state = {
   members: [],
   comments: [],
   selected: null,
-  view: ["dashboard", "gantt", "team", "list", "board"].includes(auth.pref.get("view")) ? auth.pref.get("view") : "dashboard",
+  view: ["dashboard", "gantt", "team", "workload", "list", "board"].includes(auth.pref.get("view")) ? auth.pref.get("view") : "dashboard",
   page: "home", // "home" = tableau de bord personnel, "project" = un projet, "calendar", "messages", "notifications", "admin" = administration
   home: null,
   admin: { tab: "overview", q: "", filter: "", auditFilter: "", stats: null, users: [], projects: [], audit: [], settings: null },
@@ -37,6 +38,11 @@ const state = {
   summary: { unread_messages: 0, unread_notifications: 0 },
   chat: { convs: [], current: null, messages: [], hasMore: false, drafts: {}, pick: { items: [], active: 0, start: 0 }, editing: null, reactFor: null, replyTo: null, files: [], search: null, tasks: {} },
   notifs: [],
+  wl: { data: null, sim: null, weeks: 4, delay: 3 },
+  time: { task: null, data: null },
+  timer: null,
+  timeReport: null,
+  templates: [],
   mini: new Date(), // mois affiché dans le mini-calendrier de la barre latérale
   cal: { mode: ["day", "week", "month"].includes(auth.pref.get("calmode")) ? auth.pref.get("calmode") : "week", cursor: new Date(), data: null, project: "", mine: false },
 };
@@ -88,13 +94,15 @@ async function selectProject(id) {
   state.selected = null;
   state.members = await api.members(id);
   await reloadTasks();
+  if (state.view === "workload") state.wl.data = null;
   render();
+  if (state.view === "workload") loadWorkload().catch((e) => toast(e.message));
 }
 
 /** Recharge les tâches ET les indicateurs : une modification de date peut en décaler d'autres (dépendances). */
 async function reloadTasks() {
   const pid = state.project.id;
-  [state.tasks, state.insights] = await Promise.all([api.tasks(pid), api.insights(pid).catch(() => null)]);
+  [state.tasks, state.insights, state.timeReport] = await Promise.all([api.tasks(pid), api.insights(pid).catch(() => null), api.timeReport(pid).catch(() => null)]);
 }
 
 const isLate = (t) => t.due_date && t.status !== "done" && t.due_date < D.iso(new Date());
@@ -228,19 +236,21 @@ function renderSidebar() {
         data-action="select-project" data-id="${p.id}" title="${esc(p.name)}"><span class="dot" style="--h:${hue(p.name)}"></span><span class="lbl ellipsis">${esc(p.name)}</span>${badge(projectUnread(p.id))}</button>`).join("")
         || '<p class="muted small pad lbl">Aucun projet</p>'}</div>
     </div>
+    <div id="timer-pill" class="timer-pill" ${state.timer ? "" : "hidden"}></div>
     <div class="side-foot"><button class="me-btn" data-action="account" title="Mon compte">${avatar(u.username)}<span class="lbl grow ellipsis">${esc(u.username)}</span></button>
       ${u.is_staff ? `<button class="icon-btn ${state.page === "admin" ? "active" : ""}" data-action="go-admin" title="Administration" aria-label="Administration">${icon("shield")}</button>` : ""}
       <button class="icon-btn" data-action="theme" title="Changer de thème" aria-label="Changer de thème">${icon(document.documentElement.dataset.theme === "dark" ? "sun" : "moon")}</button>
       <button class="icon-btn" data-action="logout" title="Se déconnecter" aria-label="Se déconnecter">${icon("logout")}</button></div>`;
+  paintTimerPill();
 }
 
 function titleLabel() {
-  return { dashboard: "Synthèse", gantt: "Planning", team: "Équipe", board: "Tableau" }[state.view] || "Tâches";
+  return { dashboard: "Synthèse", gantt: "Planning", team: "Équipe", workload: "Charge", board: "Tableau" }[state.view] || "Tâches";
 }
 
 function renderToolbar() {
   if (!state.project) { $("#toolbar").innerHTML = ""; return; }
-  const views = [["dashboard", "Synthèse"], ["gantt", "Gantt"], ["team", "Équipe"], ["list", "Liste"], ["board", "Tableau"]];
+  const views = [["dashboard", "Synthèse"], ["gantt", "Gantt"], ["team", "Équipe"], ["workload", "Charge"], ["list", "Liste"], ["board", "Tableau"]];
   $("#toolbar").innerHTML = `
     <h1>${esc(titleLabel())}</h1>
     <span class="tag" title="${esc(state.project.description)}">${esc(state.project.name)}</span>
@@ -263,7 +273,7 @@ function renderView() {
   }
   const old = $("#gantt-scroll");
   const keep = old ? { left: old.scrollLeft, top: old.scrollTop } : null;
-  v.innerHTML = { dashboard: dashboardView, gantt: ganttView, team: teamView, list: listView, board: boardView }[state.view]();
+  v.innerHTML = { dashboard: dashboardView, gantt: ganttView, team: teamView, workload: workloadView, list: listView, board: boardView }[state.view]();
   const g = $("#gantt-scroll");
   if (g) {
     if (keep) { g.scrollLeft = keep.left; g.scrollTop = keep.top; } else scrollGanttToToday(false);
@@ -271,7 +281,20 @@ function renderView() {
 }
 
 function dashboardView() {
-  return projectDashHtml({ insights: state.insights, project: state.project, esc, avatar });
+  return projectDashHtml({ insights: state.insights, project: state.project, esc, avatar, time: state.timeReport });
+}
+
+function workloadView() {
+  return workloadHtml({ ...state.wl, tasks: state.tasks, canWrite: canWrite(), esc, avatar });
+}
+
+/** Charge et simulation du projet courant (deux appels, tous deux en lecture seule). */
+async function loadWorkload() {
+  const pid = state.project.id;
+  const [data, sim] = await Promise.all([api.workload(pid, state.wl.weeks), api.simulate(pid, state.wl.delay).catch(() => null)]);
+  if (state.project?.id !== pid || state.view !== "workload") return;
+  Object.assign(state.wl, { data, sim });
+  renderView();
 }
 
 function teamView() {
@@ -388,6 +411,7 @@ function renderPanel() {
       <label>Priorité<select data-field="priority" ${dis}>${Object.entries(PRIO).map(([k, v]) => `<option value="${k}" ${t.priority == k ? "selected" : ""}>${v}</option>`).join("")}</select></label>
       <label>Début<input type="date" data-field="start_date" value="${t.start_date || ""}" ${dis}></label>
       <label>Fin / échéance<input type="date" data-field="due_date" value="${t.due_date || ""}" ${dis}></label>
+      <label>Répétition<select data-field="recurrence" ${dis}>${[["", "Aucune"], ["daily", "Tous les jours"], ["weekdays", "Jours ouvrés"], ["weekly", "Toutes les semaines"], ["monthly", "Tous les mois"]].map(([k, l]) => `<option value="${k}" ${(t.recurrence || "") === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
       <label>Assigné à<select data-field="assignee" ${dis}><option value="">Personne</option>${state.members.map((m) => `<option value="${m.user_id}" ${t.assignee === m.user_id ? "selected" : ""}>${esc(m.username)}</option>`).join("")}</select></label>
     </div>
     <label class="inline check-label block"><input type="checkbox" data-field="is_milestone" ${t.is_milestone ? "checked" : ""} ${dis}> Jalon (étape clé, sans durée)</label>
@@ -395,12 +419,65 @@ function renderPanel() {
       ${state.tasks.filter((o) => o.id !== t.id).map((o) => `<label class="inline dep"><input type="checkbox" data-dep="${o.id}" ${t.dependencies.includes(o.id) ? "checked" : ""} ${dis}> <span class="ellipsis">${esc(o.title)}</span></label>`).join("")
         || '<p class="muted small">Aucune autre tâche.</p>'}
       <p class="muted small">Cette tâche ne peut pas commencer avant la fin de ses prérequis ; si l'un d'eux est repoussé, elle suit.</p></div>
+    ${t.recurrence ? `<p class="muted small rec-note">${icon("repeat", 13)} Quand vous la terminez, la suivante est créée automatiquement.</p>` : ""}
+    <div class="timebox" id="time-box"><h3>Temps passé</h3><div id="time-body"><p class="muted small">Chargement…</p></div></div>
     <label class="block">Description<textarea data-field="description" rows="5" ${dis} placeholder="Ajouter une description…">${esc(t.description)}</textarea></label>
     <div class="comments"><h3>Commentaires</h3><div id="comment-list"></div>
       ${canWrite() ? `<form id="comment-form" class="row"><input name="content" placeholder="Écrire un commentaire…" required autocomplete="off"><button class="btn">Envoyer</button></form>` : ""}
     </div>`;
   loadComments(t.id);
+  loadTime(t.id);
 }
+
+/** Après une saisie : relire les tâches pour rafraîchir le total affiché ailleurs (liste, tableau). */
+async function patchTaskLocalTime() {
+  state.tasks = await api.tasks(state.project.id);
+}
+
+/* ---------- suivi du temps : chrono et saisie manuelle ---------- */
+const guardedTime = guard(async (id) => {
+  state.time = { task: id, data: await api.timeList(state.project.id, id) };
+  paintTime();
+});
+function loadTime(id) { guardedTime(id); }
+
+const elapsed = (iso) => {
+  const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  return `${TZ.pad(Math.floor(s / 3600))}:${TZ.pad(Math.floor((s % 3600) / 60))}:${TZ.pad(s % 60)}`;
+};
+
+function paintTime() {
+  const el = $("#time-body");
+  const t = state.tasks.find((x) => x.id === state.selected);
+  if (!el || !t || state.time.task !== t.id || !state.time.data) return;
+  const { total, entries } = state.time.data;
+  const mine = state.timer && state.timer.task === t.id;
+  const when = (e) => D.fmt(D.parse(e.day), { day: "numeric", month: "short" });
+  el.innerHTML = `<div class="time-total"><b>${fmtMin(total)}</b>${mine ? '<span class="running-dot" title="Chrono en cours"></span>' : ""}</div>
+    ${canWrite() ? `<div class="row">${mine
+      ? `<button class="btn primary sm" data-action="timer-stop">${icon("x", 13)} Arrêter · <span class="timer-elapsed">${elapsed(state.timer.started_at)}</span></button>`
+      : `<button class="btn sm" data-action="timer-start">▶ Démarrer le chrono</button>`}</div>
+      <form id="time-form" class="row time-form"><input name="minutes" type="number" min="1" max="1440" placeholder="min" required aria-label="Minutes"><input name="note" placeholder="Note (facultatif)" maxlength="200">
+        <button class="btn sm">Ajouter</button></form>` : ""}
+    ${entries.length ? `<div class="time-list">${entries.slice(0, 6).map((e) => `<div class="time-row"><span class="muted small">${esc(when(e))}</span><span class="ellipsis grow">${esc(e.user || "Utilisateur supprimé")}${e.note ? ` · ${esc(e.note)}` : ""}</span>
+        <b>${e.running ? "en cours" : fmtMin(e.minutes)}</b>${canWrite() && !e.running && (e.user_id === state.user.id || isOwner()) ? `<button class="icon-btn" data-action="time-del" data-id="${e.id}" aria-label="Supprimer cette saisie">${icon("x", 12)}</button>` : ""}</div>`).join("")}</div>` : '<p class="muted small">Aucun temps saisi.</p>'}`;
+}
+
+async function refreshTimer() {
+  state.timer = await api.timer().catch(() => null);
+  paintTimerPill();
+}
+
+function paintTimerPill() {
+  const pill = $("#timer-pill");
+  if (!pill) return;
+  pill.hidden = !state.timer;
+  pill.innerHTML = state.timer
+    ? `<button class="timer-open" data-action="goto-task" data-project="${state.timer.project}" data-task="${state.timer.task}" title="${esc(state.timer.project_name)}">
+        <span class="running-dot"></span><span class="ellipsis">${esc(state.timer.task_title)}</span><b class="timer-elapsed">${elapsed(state.timer.started_at)}</b></button>
+       <button class="icon-btn" data-action="timer-stop" title="Arrêter le chrono" aria-label="Arrêter le chrono">${icon("x", 14)}</button>` : "";
+}
+setInterval(() => document.querySelectorAll(".timer-elapsed").forEach((n) => { if (state.timer) n.textContent = elapsed(state.timer.started_at); }), 1000);
 
 const guardedComments = guard(async (id) => {
   state.comments = await api.comments(state.project.id, id);
@@ -455,25 +532,72 @@ function taskModal(date = "", status = "todo") {
 }
 
 function projectModal(project) {
+  const locked = project && !isOwner() ? "disabled" : "";
   openModal(project ? "Paramètres du projet" : "Nouveau projet", `
-    <label class="block">Nom<input name="name" required maxlength="150" value="${esc(project?.name)}" ${project && !isOwner() ? "disabled" : ""}></label>
-    <label class="block">Description<textarea name="description" rows="3" ${project && !isOwner() ? "disabled" : ""}>${esc(project?.description)}</textarea></label>
-    <label class="block">Échéance du projet<input type="date" name="deadline" value="${project?.deadline || ""}" ${project && !isOwner() ? "disabled" : ""}></label>
-    ${project ? `<div class="row">${isOwner() ? '<button class="btn ghost danger" value="delete" formnovalidate>Supprimer le projet</button>'
+    ${project ? "" : `<label class="block">Partir de<select name="template"><option value="">Projet vide</option></select></label>
+      <p class="muted small" id="tpl-hint"></p>`}
+    <label class="block">Nom<input name="name" required maxlength="150" value="${esc(project?.name)}" ${locked}></label>
+    <label class="block">Description<textarea name="description" rows="3" ${locked}>${esc(project?.description)}</textarea></label>
+    <div class="props">
+      <label>Échéance du projet<input type="date" name="deadline" value="${project?.deadline || ""}" ${locked}></label>
+      ${project ? "" : `<label id="start-label" hidden>Début du projet<input type="date" name="start_date" value="${D.iso(new Date())}"></label>`}
+    </div>
+    ${project ? `<label class="inline check-label block"><input type="checkbox" name="skip_weekends" ${project.skip_weekends ? "checked" : ""} ${locked}> Compter en jours ouvrés (lundi → vendredi)</label>
+      <p class="muted small">Les durées et les décalages de dépendances ignorent alors les week-ends : une tâche qui finit le vendredi libère la suivante le lundi.</p>` : ""}
+    ${project ? `<div class="row">${isOwner() ? '<button class="btn ghost danger" value="delete" formnovalidate>Supprimer le projet</button><button class="btn ghost" value="save-template" formnovalidate>Enregistrer comme modèle</button>'
       : '<button class="btn ghost danger" value="leave" formnovalidate>Quitter le projet</button>'}</div>` : ""}
     ${actions(project ? "Enregistrer" : "Créer")}`, async (f) => {
     if (!project) {
-      const p = await api.createProject({ name: f.name, description: f.description, deadline: f.deadline || null });
+      const p = f.template
+        ? await api.fromTemplate({ template: f.template, name: f.name, start_date: f.start_date || null })
+        : await api.createProject({ name: f.name, description: f.description, deadline: f.deadline || null });
+      if (f.template && (f.deadline || f.description !== (state.templates.find((t) => t.key === f.template)?.description || ""))) {
+        Object.assign(p, await api.updateProject(p.id, { description: f.description, deadline: f.deadline || null }));
+      }
       state.projects.push(p);
       await selectProject(p.id);
     } else if (isOwner()) {
-      Object.assign(project, await api.updateProject(project.id, { name: f.name, description: f.description, deadline: f.deadline || null }));
+      Object.assign(project, await api.updateProject(project.id, { name: f.name, description: f.description, deadline: f.deadline || null, skip_weekends: f.skip_weekends === "on" }));
       await reloadTasks();
       render();
     }
   });
+  const box = $("#modal");
+  /* choix d'un modèle : remplit le nom, la description et propose une date de début */
+  const select = box.querySelector('select[name="template"]');
+  if (select) {
+    api.templates().then((list) => {
+      state.templates = list;
+      const group = (title, rows) => rows.length ? `<optgroup label="${title}">${rows.map((t) => `<option value="${esc(t.key)}">${esc(t.name)} (${t.tasks} tâches)</option>`).join("")}</optgroup>` : "";
+      select.insertAdjacentHTML("beforeend", group("Modèles fournis", list.filter((t) => t.builtin)) + group("Mes modèles", list.filter((t) => !t.builtin)));
+    }).catch(() => {});
+    select.addEventListener("change", () => {
+      const t = state.templates.find((x) => x.key === select.value);
+      box.querySelector("#start-label").hidden = !t;
+      box.querySelector("#tpl-hint").innerHTML = t ? `${esc(t.description || "")}${t.skip_weekends ? " · jours ouvrés" : ""}${t.builtin ? "" : ` <button type="button" class="link" data-tpl-delete>Supprimer ce modèle</button>`}` : "";
+      if (t) {
+        box.querySelector('input[name="name"]').value = t.name;
+        box.querySelector('textarea[name="description"]').value = t.description || "";
+      }
+      box.querySelector("[data-tpl-delete]")?.addEventListener("click", guard(async () => {
+        if (!confirm(`Supprimer le modèle « ${t.name} » ?`)) return;
+        await api.deleteTemplate(Number(t.key));
+        state.templates = state.templates.filter((x) => x.key !== t.key);
+        select.querySelector(`option[value="${t.key}"]`)?.remove();
+        select.value = "";
+        select.dispatchEvent(new Event("change"));
+      }));
+    });
+  }
+  box.querySelector('button[value="save-template"]')?.addEventListener("click", guard(async (e) => {
+    e.preventDefault();
+    const name = prompt("Nom du modèle :", project.name);
+    if (!name) return;
+    const tpl = await api.saveTemplate(project.id, { name });
+    toast(`Modèle « ${tpl.name} » enregistré (${tpl.tasks} tâches).`);
+  }));
   // Les boutons « supprimer » / « quitter » sont gérés à part pour ne pas déclencher la validation du formulaire
-  $("#modal").querySelectorAll('button[value="delete"], button[value="leave"]').forEach((b) =>
+  box.querySelectorAll('button[value="delete"], button[value="leave"]').forEach((b) =>
     b.addEventListener("click", guard(async (e) => {
       e.preventDefault();
       if (b.value === "delete") {
@@ -1056,7 +1180,9 @@ function timezoneModal() {
 function setView(v) {
   state.view = v;
   auth.pref.set("view", v);
+  if (v === "workload") state.wl.data = null; // toujours des chiffres frais en entrant dans l'onglet
   render();
+  if (v === "workload") loadWorkload().catch((e) => toast(e.message));
 }
 
 /* ---------- événements ---------- */
@@ -1073,6 +1199,11 @@ const handlers = {
     state.selected = null;
     await reloadTasks();
     render();
+  },
+  "apply-suggestion": async (el) => {
+    await patchTask(Number(el.dataset.task), { assignee: Number(el.dataset.to) });
+    toast("Tâche réassignée.");
+    await loadWorkload();
   },
   "gantt-zoom": (el) => { state.zoom = el.dataset.zoom; auth.pref.set("zoom", state.zoom); renderView(); scrollGanttToToday(false); },
   "gantt-today": () => scrollGanttToToday(),
@@ -1229,6 +1360,24 @@ const handlers = {
     render();
     toast(`${m.username} est maintenant propriétaire.`);
   },
+  "timer-start": async () => {
+    state.timer = await api.timeStart(state.project.id, state.selected).then(() => api.timer());
+    paintTimerPill();
+    loadTime(state.selected);
+  },
+  "timer-stop": async () => {
+    await api.timerStop();
+    const task = state.timer?.task;
+    state.timer = null;
+    paintTimerPill();
+    if (task && task === state.selected) loadTime(task);
+    if (state.page === "project") state.timeReport = await api.timeReport(state.project.id).catch(() => null);
+    if (state.page === "project" && state.view === "dashboard") renderView();
+  },
+  "time-del": async (el) => {
+    await api.timeDelete(state.project.id, state.selected, Number(el.dataset.id));
+    loadTime(state.selected);
+  },
   "toggle-side": () => { auth.pref.set("side", sideCollapsed() ? "open" : "collapsed"); renderSidebar(); },
   "cal-prev": () => calShift(-1),
   "cal-next": () => calShift(1),
@@ -1290,6 +1439,14 @@ document.addEventListener("change", guard(async (e) => {
     await admin.onChange(t);
     return;
   }
+  if (t.dataset.wl) {
+    state.wl[t.dataset.wl] = Number(t.value);
+    state.wl.data = t.dataset.wl === "weeks" ? null : state.wl.data;
+    if (t.dataset.wl === "delay") state.wl.sim = null;
+    renderView();
+    await loadWorkload();
+    return;
+  }
   if (t.dataset.calfilter) {
     state.cal[t.dataset.calfilter] = t.type === "checkbox" ? t.checked : t.value;
     state.cal.data = null;
@@ -1324,6 +1481,15 @@ document.addEventListener("change", guard(async (e) => {
 }));
 
 document.addEventListener("submit", guard(async (e) => {
+  if (e.target.id === "time-form") {
+    e.preventDefault();
+    const f = e.target.elements;
+    await api.timeAdd(state.project.id, state.selected, { minutes: Number(f.minutes.value), note: f.note.value });
+    state.timeReport = await api.timeReport(state.project.id).catch(() => null);
+    loadTime(state.selected);
+    patchTaskLocalTime();
+    return;
+  }
   if (e.target.id === "chat-form") {
     e.preventDefault();
     await sendChat();
@@ -1582,6 +1748,7 @@ async function startApp() {
   $("#auth").hidden = true;
   $("#app").hidden = false;
   try {
+    refreshTimer().catch(() => {});
     await refreshChat().catch(() => {}); // pastilles de la barre latérale ; la messagerie ne doit jamais bloquer le reste
     await loadProjects();
     if (location.pathname.replace(/\/$/, "") === "/admin" && state.user.is_staff) await handlers["go-admin"]();

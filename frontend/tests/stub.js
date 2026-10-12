@@ -36,7 +36,7 @@ const day = (n) => iso(new Date(now.getFullYear(), now.getMonth(), now.getDate()
 const dt = (n) => new Date(Date.now() + n * 86400000).toISOString();
 globalThis.__day = day;
 
-const task = (id, title, o = {}) => ({ id, title, status: "todo", priority: 2, start_date: null, due_date: null, dependencies: [], assignee: null,
+const task = (id, title, o = {}) => ({ recurrence: "", time_minutes: 0, id, title, status: "todo", priority: 2, start_date: null, due_date: null, dependencies: [], assignee: null,
   assignee_name: null, is_milestone: false, description: "", completed_at: null, ...o });
 const brief = (id, title, o = {}) => ({ id, title, status: "todo", start: null, due: null, days_late: 0, ...o });
 
@@ -82,6 +82,22 @@ const routes = {
   "/chat/search/": [{ message: 2, conversation: 10, conversation_title: "Projet <b>A</b>", author: "alice", excerpt: "Bien reçu merci @bob", created_at: dt(0) }],
   "/chat/summary/": { unread_messages: 2, unread_notifications: 1 },
   "/chat/contacts/": [bob, carol],
+  "/timer/": { id: 9, task: 2, task_title: "Maquettes <b>", project: 7, project_name: "Projet <b>A</b>", running: true, minutes: null, started_at: new Date(Date.now() - 65000).toISOString(), day: day(0) },
+  "/projects/7/time-report/": { total: 195, by_member: [{ user: "bob", minutes: 135 }, { user: "alice", minutes: 60 }], by_task: [{ task: 2, title: "Maquettes <i>x</i>", minutes: 150 }], by_day: [] },
+  "/projects/7/tasks/2/time/": { total: 150, entries: [
+    { id: 1, user: "alice", user_id: 1, day: day(-1), minutes: 90, running: false, started_at: null, note: "Maquette <b>x</b>" },
+    { id: 2, user: "bob", user_id: 2, day: day(-2), minutes: 60, running: false, started_at: null, note: "" }] },
+  "/projects/7/workload/": { weeks: [{ start: day(-3), end: day(3) }, { start: day(4), end: day(10) }], members: [
+    { user_id: 1, username: "alice", role: "owner", cells: [{ days: 0, percent: 0, tasks: [] }, { days: 3, percent: 60, tasks: [3] }] },
+    { user_id: 2, username: "bob <b>", role: "member", cells: [{ days: 10, percent: 200, tasks: [2, 3] }, { days: 5, percent: 100, tasks: [2] }] }],
+    suggestions: [{ task: 3, title: "Livraison <i>", from: "bob <b>", from_id: 2, to: "alice", to_id: 1, week: day(-3), reason: "bob est à 200 % cette semaine, alice à 0 %." }] },
+  "/projects/7/simulate/": { delay: 3, unit: "jours", forecast_end: day(10), safe: 1, tasks: [
+    { id: 2, title: "Maquettes <script>", who: "bob", end_delay_days: 3, pushed: 1, critical: true },
+    { id: 3, title: "Livraison", who: null, end_delay_days: 3, pushed: 0, critical: true },
+    { id: 1, title: "Cadrage", who: "alice", end_delay_days: 0, pushed: 0, critical: false }] },
+  "/templates/": [
+    { key: "builtin:site-web", name: "Site web", description: "Du cadrage à la mise en ligne.", builtin: true, tasks: 8, skip_weekends: true },
+    { key: "12", name: "Mon modèle <b>", description: "", builtin: false, tasks: 4, skip_weekends: false }],
   "/calendar/contacts/": [bob, carol],
   "/notifications/": [
     { type: "invite", id: 4, read: false, created_at: dt(0), event: 6, title: "Invitation <b>x</b>", starts_at: at(1, 10), author: "bob", project: "Projet <b>A</b>", status: "invited" },
@@ -104,11 +120,11 @@ const routes = {
       start_date: day(-3), due_date: day(0), is_milestone: false, assignee_name: "bob" }],
   },
   "/auth/config/": { registration_open: true },
-  "/projects/": [{ id: 7, name: "Projet <b>A</b>", description: "", deadline: day(20), owner: 1, role: "owner" }],
+  "/projects/": [{ id: 7, name: "Projet <b>A</b>", description: "", deadline: day(20), skip_weekends: true, owner: 1, role: "owner" }],
   "/projects/7/members/": [{ user_id: 1, username: "alice", role: "owner" }, { user_id: 2, username: "bob", role: "member" }],
   "/projects/7/tasks/": [
     task(1, "Cadrage", { status: "done", priority: 1, start_date: day(-8), due_date: day(-4), assignee: 1, assignee_name: "alice" }),
-    task(2, "Maquettes <script>alert(1)</script>", { status: "doing", priority: 1, start_date: day(-3), due_date: day(3), dependencies: [1], assignee: 2, assignee_name: "bob" }),
+    task(2, "Maquettes <script>alert(1)</script>", { status: "doing", priority: 1, recurrence: "weekly", time_minutes: 150, start_date: day(-3), due_date: day(3), dependencies: [1], assignee: 2, assignee_name: "bob" }),
     task(3, "Livraison", { priority: 1, start_date: day(10), due_date: day(10), dependencies: [2], is_milestone: true }),
     task(4, "Sans date"),
   ],

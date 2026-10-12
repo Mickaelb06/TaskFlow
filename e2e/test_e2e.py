@@ -478,6 +478,131 @@ class E2E(unittest.TestCase):
         self.assertFalse(b.q("#mention-pop").is_displayed(), "aucune proposition dans un bloc-notes")
         b.q("#chat-input").clear()
 
+
+    # ------------------------------------------------------------------ gestion de projet
+    def open_project(self, name="Site web"):
+        b = self.br
+        row = next(r for r in b.qs('#sidebar .proj[data-action="select-project"]') if name in r.text)
+        row.click()
+        b.wait('#toolbar [data-view="dashboard"]')  # la vue affichée dépend de la dernière utilisée
+        return b
+
+    def has_text(self, css, text):
+        """True si un élément correspondant à `css` contient `text` (insensible aux repeints du DOM)."""
+        from selenium.common.exceptions import StaleElementReferenceException
+        try:
+            return any(text in e.text for e in self.br.qs(css))
+        except StaleElementReferenceException:
+            return False
+
+    def project_id(self, name="Site web"):
+        return next(p["id"] for p in api("GET", "/projects/", self.br.token()) if name in p["name"])
+
+    def test_40_workload_heatmap_and_delay_simulation(self):
+        b = self.open_project()
+        b.click('#toolbar [data-view="workload"]')
+        b.wait(".wl-grid")
+        self.assertTrue(b.qs(".wl-cell"))
+        b.w.until(lambda d: b.qs(".sim-row"))
+        first = b.text(".sim-row")
+        self.assertRegex(b.text(".sim"), r"\+\d+ j|absorbé")
+        from selenium.webdriver.support.ui import Select
+        Select(b.q('select[data-wl="delay"]')).select_by_value("10")
+        b.w.until(lambda d: b.qs(".sim-row") and "10 jours" in b.q('select[data-wl="delay"] option:checked').text)
+        Select(b.q('select[data-wl="weeks"]')).select_by_value("8")
+        b.w.until(lambda d: len(b.qs(".wl-head")) == 9)  # colonne vide + 8 semaines
+        b.click('#toolbar [data-view="dashboard"]')
+
+    def test_41_timer_and_manual_time(self):
+        b = self.open_project()
+        b.click('#toolbar [data-view="list"]')
+        b.wait(".task-row")
+        row = next(r for r in b.qs(".task-row") if "Intégration" in r.text)
+        row.click()
+        b.wait("#time-body .time-total")
+        b.click('#time-body [data-action="timer-start"]')
+        b.wait("#timer-pill .timer-elapsed")
+        self.assertIn("Intégration", b.text("#timer-pill"))
+        time.sleep(2.2)
+        self.assertRegex(b.text("#timer-pill .timer-elapsed"), r"^00:00:0[2-9]$")  # le compteur avance chaque seconde
+        b.click('#time-body [data-action="timer-stop"]')
+        b.w.until(lambda d: not b.q("#timer-pill").is_displayed())
+        b.q('#time-form input[name="minutes"]').send_keys("30")
+        b.q('#time-form input[name="note"]').send_keys("Intégration E2E")
+        b.q("#time-form button").click()
+        b.w.until(lambda d: "Intégration E2E" in b.text("#time-body"))
+        task = next(t for t in api("GET", f"/projects/{self.project_id()}/tasks/", b.token()) if "Intégration" in t["title"])
+        self.assertEqual(task["time_minutes"], 31)  # 1 minute de chrono (arrondi minimal) + 30 saisies
+        b.click('#panel [data-action="close-panel"]')
+
+    def test_42_timer_survives_a_page_reload(self):
+        b = self.open_project()
+        b.click('#toolbar [data-view="list"]')
+        b.wait(".task-row")
+        next(r for r in b.qs(".task-row") if "Collecte" in r.text).click()
+        b.click('#time-body [data-action="timer-start"]')
+        b.wait("#timer-pill .timer-elapsed")
+        b.d.refresh()
+        b.wait("#timer-pill .timer-elapsed")  # relu depuis le serveur : le chrono ne dépend pas de la page
+        b.click('#timer-pill [data-action="timer-stop"]')
+        b.w.until(lambda d: not b.q("#timer-pill").is_displayed())
+
+    def test_43_create_a_project_from_a_template(self):
+        b = self.br
+        b.click('#sidebar [data-action="new-project"]')
+        b.wait('#modal select[name="template"]')
+        from selenium.webdriver.support.ui import Select
+        b.w.until(lambda d: len(b.qs('#modal select[name="template"] option')) > 3)  # modèles chargés
+        Select(b.q('#modal select[name="template"]')).select_by_value("builtin:sprint")
+        self.assertEqual(b.q('#modal input[name="name"]').get_attribute("value"), "Sprint de 2 semaines")
+        self.assertTrue(b.q("#start-label").is_displayed())
+        b.q('#modal input[name="name"]').clear()
+        b.q('#modal input[name="name"]').send_keys("Sprint E2E")
+        b.q('#modal button[value="ok"]').click()
+        b.w.until(lambda d: self.has_text("#sidebar .proj", "Sprint E2E"))
+        projects = api("GET", "/projects/", b.token())
+        pid = next(p["id"] for p in projects if p["name"] == "Sprint E2E")
+        self.assertTrue(next(p for p in projects if p["id"] == pid)["skip_weekends"])
+        tasks = api("GET", f"/projects/{pid}/tasks/", b.token())
+        self.assertEqual(len(tasks), 6)
+        self.assertTrue(all(__import__("datetime").date.fromisoformat(t["start_date"]).weekday() < 5 for t in tasks))  # jours ouvrés
+
+    def test_44_completing_a_recurring_task_creates_the_next_one(self):
+        b = self.open_project()
+        pid = self.project_id()
+        made = api("POST", f"/projects/{pid}/tasks/", b.token(), {"title": "Rapport hebdo E2E", "recurrence": "weekly", "start_date": "2026-10-05", "due_date": "2026-10-07"})
+        b.d.refresh()
+        b.wait("#sidebar .navitem")
+        self.open_project()
+        b.click('#toolbar [data-view="list"]')
+        b.wait(".task-row")
+        row = next(r for r in b.qs(".task-row") if "Rapport hebdo E2E" in r.text)
+        b.q(".check", row).click()
+        b.w.until(lambda d: len([t for t in api("GET", f"/projects/{pid}/tasks/", b.token()) if t["title"] == "Rapport hebdo E2E"]) == 2)
+        tasks = [t for t in api("GET", f"/projects/{pid}/tasks/", b.token()) if t["title"] == "Rapport hebdo E2E"]
+        nxt = next(t for t in tasks if t["status"] != "done")
+        self.assertEqual((nxt["start_date"], nxt["due_date"], nxt["recurrence_of"]), ("2026-10-12", "2026-10-14", made["id"]))
+
+    def test_45_working_days_setting_changes_how_dependents_move(self):
+        b = self.br
+        token = b.token()
+        project = api("POST", "/projects/", token, {"name": "Jours ouvrés E2E"})
+        pid = project["id"]
+        a = api("POST", f"/projects/{pid}/tasks/", token, {"title": "A", "start_date": "2026-10-05", "due_date": "2026-10-07"})
+        c = api("POST", f"/projects/{pid}/tasks/", token, {"title": "C", "start_date": "2026-10-08", "due_date": "2026-10-09", "dependencies": [a["id"]]})
+        api("PATCH", f"/projects/{pid}/", token, {"skip_weekends": True})
+        api("PATCH", f"/projects/{pid}/tasks/{a['id']}/", token, {"due_date": "2026-10-09"})
+        moved = api("GET", f"/projects/{pid}/tasks/{c['id']}/", token)
+        self.assertEqual((moved["start_date"], moved["due_date"]), ("2026-10-12", "2026-10-13"))  # lundi-mardi, pas le week-end
+        b.d.refresh()
+        b.wait("#sidebar .navitem")
+        next(r for r in b.qs('#sidebar .proj[data-action="select-project"]') if "Jours ouvrés" in r.text).click()
+        b.wait('#toolbar [data-view="dashboard"]')
+        b.click('[data-action="edit-project"]')
+        b.wait('#modal input[name="skip_weekends"]')
+        self.assertTrue(b.q('#modal input[name="skip_weekends"]').is_selected())
+        b.click('#modal button[value="cancel"]')
+
     # ------------------------------------------------------------------ thème, compte
     def test_30_dark_theme_toggle(self):
         b = self.br
