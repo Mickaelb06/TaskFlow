@@ -48,7 +48,7 @@ Un conteneur contient nginx (front, port public) et gunicorn (API, interne) ; `d
    - `NUM_PROXIES` = `2` (proxy Railway puis nginx)
    - `SITE_URL` = `https://<domaine>.up.railway.app`
 3. *Settings → Networking → Generate Domain*.
-4. Premier administrateur : `railway run python manage.py createsuperuser`.
+4. Premier administrateur : s'inscrire sur le site, puis ajouter la variable `ADMIN_USERNAME` = votre nom d'utilisateur ; au redéploiement, `promote_admin` en fait un administrateur (ou `railway run python manage.py promote_admin <nom>`). Retirer la variable ensuite.
 
 ### B. Trois éléments séparés (base, API, front)
 Chaque service se construit à partir de son Dockerfile (`backend/railway.json`, `frontend/railway.json`).
