@@ -18,5 +18,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY --from=rust-build /wheels /wheels
 RUN pip install --no-cache-dir /wheels/*.whl && rm -rf /wheels
 COPY . .
+ENV PORT=8000
 EXPOSE 8000
-CMD ["sh", "-c", "python manage.py migrate && gunicorn taskflow.wsgi:application -b 0.0.0.0:8000"]
+# un seul processus + fils : les limites de débit (cache en mémoire) restent communes à toutes les requêtes
+CMD ["sh", "-c", "python manage.py migrate && gunicorn taskflow.wsgi:application -b 0.0.0.0:${PORT} --workers 1 --threads 8"]

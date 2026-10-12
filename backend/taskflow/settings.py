@@ -37,6 +37,9 @@ WSGI_APPLICATION = "taskflow.wsgi.application"
 
 if os.environ.get("USE_SQLITE") == "1":
     DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": os.environ.get("SQLITE_PATH", BASE_DIR / "db.sqlite3")}}
+elif os.environ.get("DATABASE_URL"):  # hébergeurs (Railway…) : une seule adresse de connexion
+    from .dburl import parse_database_url
+    DATABASES = {"default": parse_database_url(os.environ["DATABASE_URL"])}
 else:
     DATABASES = {
         "default": {

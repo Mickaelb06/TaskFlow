@@ -111,6 +111,7 @@ cd backend/planning_rs && cargo test --lib  # 8 tests Rust
 | Calendrier | les jours suivent le fuseau du profil (23 h 30 à Paris = lendemain à Tokyo) | événement présent / absent |
 | Calendrier | filtres projet et « mes tâches » ; aucun contenu d'un tiers ; périodes invalides (absentes, inversées, > 62 jours) | 400 / 404 |
 | API planification | lecteur : insights OK, replan 403 ; étranger : 404 | droits |
+| Configuration `DATABASE_URL` | adresse PostgreSQL décodée (mot de passe encodé, port par défaut) ; autre moteur refusé | déploiement (`taskflow/test_dburl.py`) |
 
 
 ## Scénarios manuels (front)

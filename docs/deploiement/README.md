@@ -26,11 +26,31 @@ L'image `api` applique les migrations au démarrage. Volumes : `pgdata` (base) e
 | `DJANGO_ALLOWED_HOSTS` | hôtes autorisés | votre domaine |
 | `CORS_ALLOWED_ORIGINS` | origines autorisées si front sur un autre domaine | à définir |
 | `POSTGRES_*` | connexion base | mots de passe forts |
+| `DATABASE_URL` | adresse unique de connexion PostgreSQL (prioritaire sur `POSTGRES_*`) ; fournie par Railway | `${{Postgres.DATABASE_URL}}` |
 | `SITE_URL` | adresse publique du front (liens des e-mails) | `https://taskflow.exemple.fr` |
 | `EMAIL_BACKEND`, `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USE_TLS`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL` | envoi des e-mails (mentions, invitations, résumé) ; par défaut ils s'affichent dans la console | SMTP du fournisseur, identifiants dans un gestionnaire de secrets |
 | `MEDIA_ROOT` | dossier des pièces jointes (volume `media` dans Docker) | volume persistant **sauvegardé** |
 | `LOGIN_RATE`, `REGISTER_RATE`, `CHAT_RATE`, `ACCOUNT_RATE` | limites de débit (`10/min`, `10/hour`, `60/min`, `10/hour`) | à ajuster selon le trafic |
 | `NUM_PROXIES` | nombre de proxys devant l'API (pour lire la vraie adresse IP des clients) | `1` derrière nginx |
+
+## Railway
+Trois éléments dans un même projet Railway : la base, l'API et le front. Railway n'exécute pas `docker-compose.yml` : chaque service se construit à partir de son Dockerfile (`backend/railway.json`, `frontend/railway.json`).
+
+1. **Base** : *New → Database → PostgreSQL*.
+2. **Service `api`** : *New → GitHub Repo*, **Root Directory** = `backend`. Nommer le service `api`. Ajouter un **Volume** monté sur `/data/media` (pièces jointes). Variables :
+   - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}`
+   - `DJANGO_SECRET_KEY` = valeur aléatoire (`python -c "import secrets;print(secrets.token_urlsafe(50))"`)
+   - `DJANGO_DEBUG` = `0`
+   - `DJANGO_ALLOWED_HOSTS` = `<domaine-du-front>,api.railway.internal,healthcheck.railway.app`
+   - `MEDIA_ROOT` = `/data/media`
+   - `NUM_PROXIES` = `2` (le proxy de Railway puis nginx)
+   - `SITE_URL` = `https://<domaine-du-front>` ; SMTP si on veut de vrais e-mails.
+   - **Ne pas** générer de domaine public pour ce service : seul le front est exposé.
+3. **Service `web`** : *New → GitHub Repo*, **Root Directory** = `frontend`, puis *Settings → Networking → Generate Domain*. Variable : `API_UPSTREAM` = `api.railway.internal:8000`. (`PORT` est fourni par Railway.)
+4. **Premier administrateur** : `railway run --service api python manage.py createsuperuser` (ou inscription puis passage en `is_staff` ; fermer ensuite l'inscription dans l'administration si besoin).
+5. **Résumé du matin** : un service *Cron* Railway avec `python manage.py send_digest`.
+
+Points de vigilance : un seul worker gunicorn (+ 8 fils) pour que les limites de débit, stockées en mémoire, restent communes ; sauvegarder la base (`pg_dump`) et le volume ; la configuration n'a pas encore été exécutée sur Railway ni avec Docker (non installé sur la machine de développement).
 
 ## Image de l'API
 `backend/Dockerfile` : étape 1 compile le module Rust (rustup + maturin, roue abi3, `cargo test` inclus), étape 2 installe la roue dans une image Python sans compilateur. Si le module est absent, l'application tourne avec la version Python (visible dans `/health/` → `planning_engine`).
