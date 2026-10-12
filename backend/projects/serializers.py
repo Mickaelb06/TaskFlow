@@ -9,7 +9,7 @@ class ProjectSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Project
-        fields = ["id", "name", "description", "deadline", "owner", "role", "created_at"]
+        fields = ["id", "name", "description", "deadline", "skip_weekends", "owner", "role", "created_at"]
         read_only_fields = ["owner", "created_at"]
 
     def get_role(self, obj):

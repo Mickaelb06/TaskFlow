@@ -113,3 +113,31 @@ def cascade_shifts(nodes, changed):
     return sorted((i, s, e) for i, (s, e) in spans.items() if original.get(i) != (s, e))
 
 
+def _forecast_pass(order, open_, preds, today, slow=None):
+    """Fin de chaque tâche ouverte ; `slow` = (id, jours en plus) pour une simulation."""
+    ends = {}
+    for i in order:
+        start, due = open_[i][2], open_[i][3]
+        shift = max(0, today - due)
+        for p in preds[i]:
+            shift = max(shift, ends[p] + 1 - start)
+        ends[i] = due + shift + (slow[1] if slow and slow[0] == i else 0)
+    return ends
+
+
+def delay_impacts(nodes, today, delay):
+    """Simulation « et si ? » : [(id, recul de la fin du projet en jours, nb d'autres tâches repoussées)] si chaque
+    tâche ouverte prenait `delay` jours de plus. Tri : recul décroissant, tâches repoussées décroissant, id."""
+    ids, open_, preds = _open_graph(nodes)
+    if not ids:
+        return []
+    order = _topo(ids, preds)
+    base = _forecast_pass(order, open_, preds, today)
+    base_end = max(base.values())
+    out = []
+    for i in ids:
+        ends = _forecast_pass(order, open_, preds, today, (i, delay))
+        pushed = sum(1 for j in ids if j != i and ends[j] != base[j])
+        out.append((i, max(ends.values()) - base_end, pushed))
+    out.sort(key=lambda r: (-r[1], -r[2], r[0]))
+    return out

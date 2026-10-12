@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from projects.services import get_role
 
-from . import planning
+from . import planning, time_services
 from .models import Comment, Task
 
 
@@ -10,15 +10,20 @@ class TaskSerializer(serializers.ModelSerializer):
     priority = serializers.IntegerField(min_value=1, max_value=3, default=2)
     assignee_name = serializers.CharField(source="assignee.username", read_only=True, default=None)
     dependencies = serializers.PrimaryKeyRelatedField(many=True, queryset=Task.objects.all(), required=False)
+    time_minutes = serializers.SerializerMethodField()
+
+    def get_time_minutes(self, obj):
+        value = getattr(obj, "time_total", None)  # annoté par la vue de liste (une seule requête)
+        return value if value is not None else time_services.total(obj)
 
     class Meta:
         model = Task
         fields = [
             "id", "project", "title", "description", "status", "priority",
-            "start_date", "due_date", "is_milestone", "dependencies",
-            "assignee", "assignee_name", "created_at", "completed_at",
+            "start_date", "due_date", "is_milestone", "dependencies", "recurrence", "recurrence_of",
+            "assignee", "assignee_name", "created_at", "completed_at", "time_minutes",
         ]
-        read_only_fields = ["project", "created_at", "completed_at"]
+        read_only_fields = ["project", "created_at", "completed_at", "recurrence_of", "time_minutes"]
 
     def validate_assignee(self, value):
         project = self.context["view"].project

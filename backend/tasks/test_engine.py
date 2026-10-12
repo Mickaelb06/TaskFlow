@@ -73,18 +73,33 @@ class RustMatchesPythonTests(SimpleTestCase):
             self.assertEqual(rust.cascade_shifts(nodes, 1), planning_py.cascade_shifts(nodes, 1))  # doit se terminer
         self.assertGreater(cyclic, 20, "le test doit réellement exercer des cycles")
 
+    def test_delay_simulation_agrees_including_cycles(self):
+        rng = random.Random(31)
+        errors = 0
+        for case in range(self.CASES):
+            nodes = random_nodes(rng, rng.randint(1, 35), cycles=rng.random() < 0.25)
+            today, delay = rng.randint(-5, 50), rng.randint(0, 20)
+            a, b = outcome(rust.delay_impacts, nodes, today, delay), outcome(planning_py.delay_impacts, nodes, today, delay)
+            errors += a[0] == "error"
+            self.assertEqual(a, b, f"cas {case}")
+        self.assertGreater(errors, 3, "le test doit réellement exercer des cycles")
+
     def test_large_graph(self):
         rng = random.Random(1)
         nodes = random_nodes(rng, 3000)
         self.assertEqual(rust.critical_path(nodes), planning_py.critical_path(nodes))
         self.assertEqual(rust.forecast_end(nodes, 20), planning_py.forecast_end(nodes, 20))
         self.assertEqual(rust.cascade_shifts(nodes, nodes[0][0]), planning_py.cascade_shifts(nodes, nodes[0][0]))
+        small = nodes[:400]
+        small = [(i, d, s, e, [p for p in ps if p <= 400]) for i, d, s, e, ps in small]
+        self.assertEqual(rust.delay_impacts(small, 20, 5), planning_py.delay_impacts(small, 20, 5))
 
     def test_empty_inputs(self):
         for mod in (rust, planning_py):
             self.assertEqual(mod.critical_path([]), ([], 0))
             self.assertIsNone(mod.forecast_end([], 5))
             self.assertEqual(mod.cascade_shifts([], 1), [])
+            self.assertEqual(mod.delay_impacts([], 5, 3), [])
 
     def test_python_types_are_what_django_expects(self):
         ids, total = rust.critical_path([(1, False, 0, 2, [])])

@@ -1,7 +1,8 @@
 """Moteur de planification : dépendances, chemin critique, prévision de fin, risques.
 
 Fonctions déterministes (aucun appel externe) : mêmes données, mêmes résultats.
-Les durées sont en jours calendaires. Une tâche n'a de « span » que si elle a au moins une date.
+Les durées sont en jours calendaires, ou en jours ouvrés (lundi-vendredi) si le projet l'a choisi (`skip_weekends`) : dans ce cas
+les dates sont converties en numéros de jour ouvré avant le moteur et reconverties après (voir `workdays.py`). Une tâche n'a de « span » que si elle a au moins une date.
 """
 from collections import defaultdict
 from datetime import date, timedelta
@@ -10,6 +11,7 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 from . import planning_engine as engine
+from . import workdays as wd
 from .models import Task
 
 DAY = timedelta(days=1)
@@ -26,9 +28,10 @@ def span(task):
     return (start or due, due or start)
 
 
-def duration(task):
+def duration(task, workdays=False):
+    """Durée en jours (calendaires, ou ouvrés si `workdays`)."""
     start, due = span(task)
-    return (due - start).days + 1
+    return wd.to_index(due) - wd.to_index(start) + 1 if workdays else (due - start).days + 1
 
 
 # ---------------------------------------------------------------- graphe
@@ -46,13 +49,19 @@ def would_cycle(task, new_dependencies):
     return False
 
 
-def _nodes(tasks):
-    """Tâches Django → nœuds du moteur : (id, terminée, début, fin, prérequis), dates en ordinaux."""
+def _unit(workdays):
+    """(date → entier du moteur, entier du moteur → date)."""
+    return (wd.to_index, wd.from_index) if workdays else (date.toordinal, date.fromordinal)
+
+
+def _nodes(tasks, workdays=False):
+    """Tâches Django → nœuds du moteur : (id, terminée, début, fin, prérequis), dates en ordinaux (ou en jours ouvrés)."""
+    enc, _ = _unit(workdays)
     out = []
     for t in tasks:
         sp = span(t)
-        out.append((t.pk, t.status == "done", sp[0].toordinal() if sp else None,
-                    sp[1].toordinal() if sp else None, [p.pk for p in t.dependencies.all()]))
+        out.append((t.pk, t.status == "done", enc(sp[0]) if sp else None,
+                    enc(sp[1]) if sp else None, [p.pk for p in t.dependencies.all()]))
     return out
 
 
@@ -65,10 +74,12 @@ def cascade(task):
     """Repousse (sans jamais avancer) les tâches qui dépendent de `task` et ne peuvent plus commencer à leur
     date. Les tâches terminées ne bougent pas. Le calcul est fait par le moteur (Rust ou Python) sur l'état
     enregistré en base ; `task` doit donc avoir été sauvegardée. Retourne les ids déplacés."""
+    workdays = task.project.skip_weekends
+    _, dec = _unit(workdays)
     tasks = list(Task.objects.filter(project_id=task.project_id).prefetch_related("dependencies"))
-    shifts = engine.cascade_shifts(_nodes(tasks), task.pk)
+    shifts = engine.cascade_shifts(_nodes(tasks, workdays), task.pk)
     for pk, start, end in shifts:
-        Task.objects.filter(pk=pk).update(start_date=date.fromordinal(start), due_date=date.fromordinal(end))
+        Task.objects.filter(pk=pk).update(start_date=dec(start), due_date=dec(end))
     return [pk for pk, _, _ in shifts]
 
 
@@ -76,14 +87,17 @@ def replan(project, today=None):
     """« Rattraper le retard » : les tâches non terminées dont l'échéance est passée redémarrent
     aujourd'hui (durée conservée) puis les dépendances sont propagées. Retourne les ids déplacés."""
     today = today or date.today()
+    if project.skip_weekends:
+        today = wd.next_workday(today)  # un samedi, on redémarre lundi
     late = [t for t in project.tasks.exclude(status="done") if span(t) and span(t)[1] < today]
     moved = []
     for t in sorted(late, key=lambda t: span(t)[1]):
         t.refresh_from_db()  # une propagation précédente a pu déjà la repousser
         if span(t)[1] >= today:
             continue
-        length = duration(t)
-        t.start_date, t.due_date = today, today + timedelta(days=length - 1)
+        length = duration(t, project.skip_weekends)
+        t.start_date = today
+        t.due_date = wd.add_workdays(today, length - 1) if project.skip_weekends else today + timedelta(days=length - 1)
         t.save(update_fields=["start_date", "due_date"])
         moved.append(t.pk)
         moved.extend(cascade(t))
@@ -91,23 +105,93 @@ def replan(project, today=None):
 
 
 # ---------------------------------------------------------------- analyse
-def critical_path(tasks):
+def critical_path(tasks, workdays=False):
     """Chemin critique (CPM) sur les tâches non terminées : séquence de tâches dépendantes la plus
     longue — tout retard sur l'une d'elles décale la fin du projet. Retourne (ids, durée en jours)."""
     try:
-        return engine.critical_path(_nodes(tasks))
+        return engine.critical_path(_nodes(tasks, workdays))
     except ValueError:
         raise _loop_error()
 
 
-def forecast_end(tasks, today):
+def forecast_end(tasks, today, workdays=False):
     """Fin prévue du projet si rien ne change : une tâche en retard finit au mieux aujourd'hui, et ce
     décalage se propage aux tâches qui en dépendent."""
+    enc, dec = _unit(workdays)
     try:
-        end = engine.forecast_end(_nodes(tasks), today.toordinal())
+        end = engine.forecast_end(_nodes(tasks, workdays), enc(today))
     except ValueError:
         raise _loop_error()
-    return date.fromordinal(end) if end is not None else None
+    return dec(end) if end is not None else None
+
+
+def delay_simulation(project, delay, today=None, limit=10):
+    """« Et si cette tâche prenait `delay` jours de plus ? » : classe les tâches ouvertes par recul de la fin du projet
+    (en jours, ou en jours ouvrés si le projet les utilise). Le calcul de toutes les hypothèses est fait par le moteur."""
+    today = today or date.today()
+    workdays = project.skip_weekends
+    enc, dec = _unit(workdays)
+    tasks = list(project.tasks.select_related("assignee").prefetch_related("dependencies"))
+    titles = {t.pk: t for t in tasks}
+    base = forecast_end(tasks, today, workdays)
+    try:
+        rows = engine.delay_impacts(_nodes(tasks, workdays), enc(today), delay)
+    except ValueError:
+        raise _loop_error()
+    return {
+        "delay": delay, "unit": "jours ouvrés" if workdays else "jours", "forecast_end": base,
+        "tasks": [{"id": i, "title": titles[i].title, "who": titles[i].assignee.username if titles[i].assignee else None,
+                   "end_delay_days": impact, "pushed": pushed, "critical": impact >= delay}
+                  for i, impact, pushed in rows[:limit]],
+        "safe": sum(1 for _, impact, _ in rows if impact == 0),  # tâches qui absorbent ce retard sans rien décaler
+    }
+
+
+def workload(project, weeks=4, today=None):
+    """Charge de chaque membre semaine par semaine (1 tâche ouverte sur un jour ouvré = 1 jour de charge ; capacité
+    5 jours par semaine, donc 200 % = deux tâches en parallèle) + propositions de rééquilibrage."""
+    today = today or date.today()
+    monday = today - timedelta(days=today.weekday())
+    starts = [monday + timedelta(days=7 * k) for k in range(weeks)]
+    tasks = [t for t in project.tasks.select_related("assignee") if t.status != "done" and span(t)]
+    members = [m for m in project.membership_set.select_related("user").order_by("user__username")]
+
+    def days_in(task, week_start):
+        a, b = span(task)
+        return sum(1 for d in range(5) if a <= week_start + timedelta(days=d) <= b)
+
+    cells = {}
+    for m in members:
+        cells[m.user_id] = []
+        for ws in starts:
+            mine = [(t, days_in(t, ws)) for t in tasks if t.assignee_id == m.user_id]
+            mine = [(t, n) for t, n in mine if n]
+            total = sum(n for _, n in mine)
+            cells[m.user_id].append({"days": total, "percent": round(100 * total / 5), "tasks": [t.pk for t, _ in mine]})
+    suggestions, moved = [], set()
+    writers = [m for m in members if m.role != "viewer"]
+    for k, ws in enumerate(starts):
+        for m in members:
+            if cells[m.user_id][k]["percent"] <= 100:
+                continue
+            movable = sorted((t for t in tasks if t.assignee_id == m.user_id and days_in(t, ws) and t.status == "todo" and t.pk not in moved),
+                             key=lambda t: (-t.priority, -days_in(t, ws), t.pk))  # d'abord les moins prioritaires, pas encore commencées
+            for t in movable[:1]:
+                n = days_in(t, ws)
+                fits = [w for w in writers if w.user_id != m.user_id and cells[w.user_id][k]["days"] + n <= 5]
+                if not fits:
+                    continue
+                target = min(fits, key=lambda w: (cells[w.user_id][k]["days"], w.user.username))
+                moved.add(t.pk)
+                suggestions.append({"task": t.pk, "title": t.title, "from": m.user.username, "from_id": m.user_id,
+                                    "to": target.user.username, "to_id": target.user_id, "week": ws,
+                                    "reason": f"{m.user.username} est à {cells[m.user_id][k]['percent']} % cette semaine, "
+                                              f"{target.user.username} à {cells[target.user_id][k]['percent']} %."})
+    return {
+        "weeks": [{"start": ws, "end": ws + timedelta(days=6)} for ws in starts],
+        "members": [{"user_id": m.user_id, "username": m.user.username, "role": m.role, "cells": cells[m.user_id]} for m in members],
+        "suggestions": suggestions[:6],
+    }
 
 
 def _peak_load(tasks):
@@ -270,16 +354,16 @@ def insights(project, today=None):
     tasks = list(project.tasks.select_related("assignee").prefetch_related("dependencies"))
     open_tasks = [t for t in tasks if t.status != "done"]
 
-    weight = lambda t: duration(t) if span(t) else 1
+    weight = lambda t: duration(t, project.skip_weekends) if span(t) else 1
     total_w = sum(weight(t) for t in tasks)
     done_w = sum(weight(t) for t in tasks if t.status == "done")
     spans = [span(t) for t in tasks if span(t)]
     planned_end = max((s[1] for s in spans), default=None)
-    forecast = forecast_end(tasks, today)
+    forecast = forecast_end(tasks, today, project.skip_weekends)
     reference = project.deadline or planned_end
     slip = (forecast - reference).days if forecast and reference else None
 
-    crit_ids, crit_days = critical_path(tasks)
+    crit_ids, crit_days = critical_path(tasks, project.skip_weekends)
     risks = []
     for t in open_tasks:
         sp = span(t)

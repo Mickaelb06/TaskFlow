@@ -58,3 +58,6 @@ def forecast_end(nodes, today):
 def cascade_shifts(nodes, changed):
     return _impl.cascade_shifts(nodes, changed)
 
+
+def delay_impacts(nodes, today, delay):
+    return _impl.delay_impacts(nodes, today, delay)

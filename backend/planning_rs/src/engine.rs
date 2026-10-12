@@ -156,6 +156,48 @@ pub fn forecast_end(nodes: &[Node], today: i64) -> Result<Option<i64>, EngineErr
     Ok(ends.into_iter().max())
 }
 
+/// Une passe de prévision : fin de chaque tâche ouverte, avec éventuellement `delay` jours de plus sur la tâche `slow`.
+fn forecast_pass(g: &OpenGraph, order: &[usize], today: i64, slow: Option<(usize, i64)>, ends: &mut [i64]) {
+    for &i in order {
+        let mut shift = (today - g.end[i]).max(0);
+        for &p in &g.preds[i] {
+            shift = shift.max(ends[p] + 1 - g.start[i]);
+        }
+        let extra = match slow {
+            Some((s, d)) if s == i => d,
+            _ => 0,
+        };
+        ends[i] = g.end[i] + shift + extra;
+    }
+}
+
+/// Simulation « et si ? » : pour chaque tâche ouverte et planifiée, de combien recule la fin du projet si elle prend
+/// `delay` jours de plus ? Retourne (id, recul de la fin en jours, nombre d'autres tâches repoussées), triés par recul
+/// décroissant, puis par nombre de tâches repoussées décroissant, puis par id. Une passe complète par tâche : c'est le
+/// calcul où Rust fait vraiment la différence.
+pub fn delay_impacts(nodes: &[Node], today: i64, delay: i64) -> Result<Vec<(Id, i64, usize)>, EngineError> {
+    let g = OpenGraph::new(nodes);
+    if g.ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let order = topo(&g.preds)?;
+    let n = g.ids.len();
+    let mut base = vec![0i64; n];
+    forecast_pass(&g, &order, today, None, &mut base);
+    let base_end = base.iter().copied().max().unwrap_or(0);
+    let mut ends = vec![0i64; n];
+    let mut out: Vec<(Id, i64, usize)> = (0..n)
+        .map(|i| {
+            forecast_pass(&g, &order, today, Some((i, delay)), &mut ends);
+            let end = ends.iter().copied().max().unwrap_or(0);
+            let pushed = (0..n).filter(|&j| j != i && ends[j] != base[j]).count();
+            (g.ids[i], end - base_end, pushed)
+        })
+        .collect();
+    out.sort_unstable_by(|a, b| b.1.cmp(&a.1).then(b.2.cmp(&a.2)).then(a.0.cmp(&b.0)));
+    Ok(out)
+}
+
 /// Décalages à appliquer quand `changed` a bougé : ses successeurs sont repoussés (jamais avancés), durée
 /// conservée, et le décalage se propage. Les tâches terminées ne bougent pas et arrêtent la propagation.
 /// Retourne (id, nouveau début, nouvelle fin) pour chaque tâche réellement déplacée, triées par id.
@@ -257,6 +299,18 @@ mod tests {
         assert_eq!(forecast_end(&nodes, 10), Ok(Some(13)));
         assert_eq!(forecast_end(&nodes, 0), Ok(Some(5)));
         assert_eq!(forecast_end(&[], 0), Ok(None));
+    }
+
+    #[test]
+    fn delay_impacts_rank_critical_tasks_first() {
+        // A 0-4 → B 5-9 (chaîne critique), C 0-2 isolée et courte : retarder C de 3 jours ne change pas la fin
+        let nodes = vec![n(1, Some((0, 4)), &[]), n(2, Some((5, 9)), &[1]), n(3, Some((0, 2)), &[])];
+        let r = delay_impacts(&nodes, 0, 3).unwrap();
+        assert_eq!(r, vec![(1, 3, 1), (2, 3, 0), (3, 0, 0)]);
+        // retard plus long que la marge de C : C devient critique
+        let r = delay_impacts(&nodes, 0, 10).unwrap();
+        assert_eq!(r[0].1, 10);
+        assert!(delay_impacts(&[], 0, 3).unwrap().is_empty());
     }
 
     #[test]

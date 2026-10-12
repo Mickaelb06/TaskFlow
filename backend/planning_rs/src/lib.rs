@@ -44,11 +44,18 @@ fn cascade_shifts(raw: Vec<PyNode>, changed: i64) -> Vec<(i64, i64, i64)> {
     engine::cascade_shifts(&nodes(raw), changed)
 }
 
+/// delay_impacts(nodes, today, delay) -> [(id, recul de la fin en jours, nb d'autres tâches repoussées)]
+#[pyfunction]
+fn delay_impacts(raw: Vec<PyNode>, today: i64, delay: i64) -> PyResult<Vec<(i64, i64, usize)>> {
+    engine::delay_impacts(&nodes(raw), today, delay).map_err(cycle)
+}
+
 #[pymodule]
 fn taskflow_planning(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(critical_path, m)?)?;
     m.add_function(wrap_pyfunction!(forecast_end, m)?)?;
     m.add_function(wrap_pyfunction!(cascade_shifts, m)?)?;
+    m.add_function(wrap_pyfunction!(delay_impacts, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }

@@ -16,6 +16,10 @@ class Task(models.Model):
     start_date = models.DateField(null=True, blank=True)
     due_date = models.DateField(null=True, blank=True)  # fin de la tâche (échéance)
     is_milestone = models.BooleanField(default=False)  # jalon : affiché en losange dans le Gantt
+    # tâche récurrente : quand on la termine, la suivante est créée (voir services._spawn_next)
+    recurrence = models.CharField(max_length=8, blank=True, choices=[("daily", "Tous les jours"), ("weekdays", "Jours ouvrés"),
+                                                                      ("weekly", "Toutes les semaines"), ("monthly", "Tous les mois")])
+    recurrence_of = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL, related_name="recurrences")
     # « cette tâche dépend de… » : elle ne peut pas commencer avant la fin de ses prédécesseurs
     dependencies = models.ManyToManyField("self", symmetrical=False, related_name="dependents", blank=True)
     assignee = models.ForeignKey(
@@ -42,3 +46,27 @@ class Comment(models.Model):
     author = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)  # null = compte supprimé
     content = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class TimeEntry(models.Model):
+    """Temps passé sur une tâche. Un chrono en cours a `started_at` et pas encore de `minutes` ; une saisie manuelle
+    a des `minutes` et pas de `started_at`. `day` (jour local) sert aux rapports."""
+
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name="time_entries")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="time_entries")  # null = compte supprimé
+    day = models.DateField()
+    minutes = models.PositiveIntegerField(null=True, blank=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    note = models.CharField(max_length=200, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-day", "-id"]
+        constraints = [
+            models.CheckConstraint(condition=models.Q(minutes__isnull=False) | models.Q(started_at__isnull=False), name="timeentry_running_or_done"),
+            models.CheckConstraint(condition=models.Q(minutes__isnull=True) | models.Q(minutes__lte=1440), name="timeentry_max_one_day"),
+        ]
+
+    @property
+    def running(self):
+        return self.minutes is None
