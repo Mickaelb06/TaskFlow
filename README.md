@@ -1,6 +1,6 @@
 # TaskFlow — gestion de projet et de tâches, solo ou en équipe
 
-Projet support de la VAE **Concepteur Développeur d'Applications** (RNCP niveau 6).
+
 
 Application web de gestion de projet, seul ou en équipe : tâches et Gantt, calendrier à fuseaux horaires, messagerie interne avec mentions, suivi du temps, charge d'équipe et administration.
 
@@ -13,7 +13,7 @@ Application web de gestion de projet, seul ou en équipe : tâches et Gantt, cal
 - **Réglages** : ouvrir/fermer les inscriptions publiques
 - Garde-fous : impossible de se supprimer / se désactiver / se retirer ses droits, de supprimer le dernier admin actif, ou de toucher à un superutilisateur sans l'être soi-même
 
-**Calendrier** (entrée « Calendrier » du menu, façon Notion Calendar)
+**Calendrier** 
 - Vues **jour / semaine / mois** : grille horaire avec ligne « maintenant », événements à l'heure (blocs côte à côte quand ils se chevauchent), tâches de tous vos projets posées à la journée
 - **À la souris** : glisser un événement pour le déplacer (autre jour, autre heure), tirer son bord inférieur pour le redimensionner, balayer une zone vide pour en créer un (pas de 15 minutes)
 - **Événements récurrents** (tous les jours, du lundi au vendredi, chaque semaine, chaque mois, jusqu'à une date) : l'heure murale est conservée à travers le changement d'heure ; on peut supprimer une seule occurrence ou toute la série
